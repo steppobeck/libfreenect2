@@ -45,6 +45,7 @@
 #include <libfreenect2/rgb_packet_processor.h>
 #include <libfreenect2/depth_packet_stream_parser.h>
 #include <libfreenect2/frame_listener.h>
+#include <libfreenect2/protocol/control_command.h>
 
 bool should_resubmit = true;
 uint32_t num_iso_requests_outstanding = 0;
@@ -281,10 +282,10 @@ void hexdump( uint8_t* buffer, int size, const char* info ) {
   }
 }
 
-int KReadData02(libusb_device_handle *handle)
+int KReadFirmwareVersions(libusb_device_handle *handle)
 {
   uint8_t* data = NULL;
-  int res = KGenericCommand(handle, KCMD_READ_DATA1, 0x00, 20, 0x200, &data);
+  int res = KGenericCommand(handle, KCMD_READ_FIRMWARE_VERSIONS, 0x00, 20, 0x200, &data);
 
   if (data != NULL)
   {
@@ -310,7 +311,7 @@ int KReadData02(libusb_device_handle *handle)
      *
      */
     //TODO parse data
-    hexdump(data,res,"KCMD_READ_DATA1");
+    hexdump(data,res,"KCMD_READ_FIRMWARE_VERSIONS");
     delete[] data;
   }
 
@@ -574,7 +575,7 @@ void RunKinect(libusb_device_handle *handle, libfreenect2::DepthPacketProcessor&
 
   r = KSetSensorStatus(handle, KSENSOR_ENABLE);
 
-  r = KReadData02(handle);
+  r = KReadFirmwareVersions(handle);
 
   r = KReadData14(handle);
 
@@ -614,6 +615,12 @@ void sigint_handler(int s)
 
 int main(int argc, char *argv[])
 {
+  std::cout << sizeof(libfreenect2::protocol::SetModeDisabledCommand) << std::endl;
+  std::cout << sizeof(libfreenect2::protocol::ReadFirmwareVersionsCommand) << std::endl;
+  std::cout << sizeof(libfreenect2::protocol::SetStreamDisabledCommand) << std::endl;
+
+  return 0;
+
   std::string program_path(argv[0]);
   size_t executable_name_idx = program_path.rfind("Protonect");
 
