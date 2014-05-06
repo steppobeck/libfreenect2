@@ -42,6 +42,8 @@ ADD_EXECUTABLE(Protonect
   src/depth_packet_processor.cpp
   src/cpu_depth_packet_processor.cpp
   
+  src/usb_control.cpp
+  
   Protonect.cpp
   
   ${LIBFREENECT2_THREADING_SOURCE}
