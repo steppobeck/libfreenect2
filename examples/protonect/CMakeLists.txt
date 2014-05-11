@@ -43,6 +43,7 @@ ADD_EXECUTABLE(Protonect
   src/cpu_depth_packet_processor.cpp
   
   src/usb_control.cpp
+  src/command_transaction.cpp
   
   Protonect.cpp
   
