@@ -15,6 +15,9 @@ INCLUDE_DIRECTORIES(${LIBFREENECT2_THREADING_INCLUDE_DIR})
 #set the default path for built executables to the "bin" directory
 SET(EXECUTABLE_OUTPUT_PATH ${MY_DIR}/bin)
 
+#set the default path for built libraries to the "lib" directory
+SET(LIBRARY_OUTPUT_PATH ${MY_DIR}/lib)
+
 # dependencies
 FIND_PACKAGE(OpenCV REQUIRED)
 
@@ -27,7 +30,7 @@ LINK_DIRECTORIES("${MY_DIR}/../../depends/libusbx/lib/")
 
 INCLUDE_DIRECTORIES("${MY_DIR}/include")
 
-ADD_EXECUTABLE(Protonect
+ADD_LIBRARY(freenect2 SHARED
   src/transfer_pool.cpp
   src/event_loop.cpp
   
@@ -45,15 +48,21 @@ ADD_EXECUTABLE(Protonect
   src/usb_control.cpp
   src/command_transaction.cpp
   src/libfreenect2.cpp
-  
-  Protonect.cpp
-  
   ${LIBFREENECT2_THREADING_SOURCE}
 )
 
-TARGET_LINK_LIBRARIES(Protonect
+TARGET_LINK_LIBRARIES(freenect2
   usb-1.0
   ${OpenCV_LIBS}
   turbojpeg
   ${LIBFREENECT2_THREADING_LIBRARIES}
+)
+  
+ADD_EXECUTABLE(Protonect
+  Protonect.cpp
+)
+  
+TARGET_LINK_LIBRARIES(Protonect
+  freenect2
+  ${OpenCV_LIBS}
 )

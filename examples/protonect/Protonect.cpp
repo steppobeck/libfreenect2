@@ -24,10 +24,8 @@
  * either License.
  */
 
-#include "Protonect.h"
 
 #include <iostream>
-
 #include <signal.h>
 
 #include <opencv2/opencv.hpp>
