@@ -112,6 +112,47 @@ void TurboJpegRgbPacketProcessor::process(const RgbPacket &packet)
   {
     impl_->startTiming();
 
+    uint8_t *p = packet.jpeg_buffer;
+    int i = 0;
+
+    while(p < packet.jpeg_buffer + packet.jpeg_buffer_length)
+    {
+      uint16_t *tmp = reinterpret_cast<uint16_t*>(p);
+      int tag = p[1] | p[0] << 8;
+      int s1 =  p[2];
+      int s2 =  p[3];
+      int length = 256 *s1 + s2 + 2;
+
+      std::cout << std::hex << "0x" << tag << std::endl;
+
+      if(tag >= 0xFFE0 && tag <= 0xFFEF)
+      {
+        std::cout << std::dec << "found app" << (tag - 0xFFE0)  << " length: " << length << std::endl;
+        for(int j = 0; j < length - 4; ++j)
+        {
+          std::cout << int(p[4 + j]) << " ";
+        }
+        std::cout  << std::endl;
+      }
+
+      if(tag == 0xFFFE)
+      {
+        std::cout << "found com" << std::endl;
+      }
+
+      if(tag == 0xFFDA) break;
+      if(tag == 0xFFD8)
+      {
+        p += 2;
+      }
+      else
+      {
+        p += length;
+      }
+
+      i += 1;
+    }
+
     int r = tjDecompress2(impl_->decompressor, packet.jpeg_buffer, packet.jpeg_buffer_length, impl_->frame->data, 1920, 1920 * tjPixelSize[TJPF_BGR], 1080, TJPF_BGR, 0);
 
     if(r == 0)
@@ -131,3 +172,4 @@ void TurboJpegRgbPacketProcessor::process(const RgbPacket &packet)
 }
 
 } /* namespace libfreenect2 */
+
