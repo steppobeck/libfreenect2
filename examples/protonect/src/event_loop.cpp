@@ -33,7 +33,7 @@ namespace libfreenect2
 namespace usb
 {
 
-void EventLoop::static_execute(void *cookie)
+  void EventLoop::static_execute(void *cookie)
 {
   static_cast<EventLoop *>(cookie)->execute();
 }
@@ -49,10 +49,11 @@ EventLoop::~EventLoop()
   stop();
 }
 
-void EventLoop::start()
+void EventLoop::start(libusb_context* context)
 {
   if(thread_ == 0)
   {
+    context_ = context;
     shutdown_ = false;
     thread_ = new libfreenect2::thread(&EventLoop::static_execute, this);
   }
@@ -73,7 +74,7 @@ void EventLoop::execute()
 {
   while(!shutdown_)
   {
-    libusb_handle_events(NULL);
+    libusb_handle_events(context_/*NULL*/);
   }
 }
 

@@ -29,6 +29,8 @@
 
 #include <libfreenect2/threading.h>
 
+struct libusb_context;
+
 namespace libfreenect2
 {
 namespace usb
@@ -40,13 +42,13 @@ public:
   EventLoop();
   virtual ~EventLoop();
 
-  void start();
+  void start(libusb_context* context);
 
   void stop();
 private:
   bool shutdown_;
   libfreenect2::thread *thread_;
-
+  libusb_context* context_;
   static void static_execute(void *cookie);
   void execute();
 };

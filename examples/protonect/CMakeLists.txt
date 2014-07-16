@@ -17,6 +17,19 @@ INCLUDE(GenerateResources)
 #set the default path for built executables to the "bin" directory
 SET(EXECUTABLE_OUTPUT_PATH ${MY_DIR}/bin)
 
+# for zmq
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake_modules)
+include(FindZMQ)
+INCLUDE_DIRECTORIES(${ZMQ_INCLUDE_DIRS})
+LINK_DIRECTORIES(${ZMQ_LIBRARY_DIRS})
+
+# for boost
+include(FindBoost)
+INCLUDE_DIRECTORIES(${BOOST_INCLUDE_DIRS})
+LINK_DIRECTORIES(${BOOST_LIBRARY_DIRS})
+
+
+
 # dependencies
 FIND_PACKAGE(OpenCV REQUIRED)
 
@@ -74,7 +87,13 @@ ADD_EXECUTABLE(Protonect
   src/cpu_depth_packet_processor.cpp
   src/opengl_depth_packet_processor.cpp
   src/resource.cpp
-  
+
+  src/CMDParser.cpp
+  src/DXTCompressor.cpp
+  src/fastdxt/libdxt.cpp
+  src/fastdxt/dxt.cpp
+  src/fastdxt/util.cpp
+
   Protonect.cpp
   
   ${LIBFREENECT2_THREADING_SOURCE}
@@ -90,6 +109,8 @@ TARGET_LINK_LIBRARIES(Protonect
   GLEWmx
   glfw
   ${GLFW_LIBRARIES}
+  ${ZMQ_LIBRARIES}
+  ${BOOST_LIBRARIES}
 )
 
 ADD_EXECUTABLE(test_opengl
@@ -112,3 +133,6 @@ TARGET_LINK_LIBRARIES(test_opengl
   glfw
   ${GLFW_LIBRARIES}
 )
+
+
+#set(CMAKE_CXX_FLAGS "-Wall -std=c++0x")
