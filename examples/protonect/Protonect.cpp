@@ -54,10 +54,10 @@
 
 #include <CMDParser.h>
 #include <zmq.hpp>
-
+#include <StreamBuffer.h>
 
 #include <boost/thread/thread.hpp>
-#include <boost/thread/mutex.hpp>
+#include <boost/thread/barrier.hpp>
 #include <boost/bind.hpp>
 
 #include <map>
@@ -727,7 +727,7 @@ libusb_device_handle* libusb_open_device_with_vid_pid_serial(libusb_context *ctx
 
 
 
-int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::string& program_path){
+int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::string& program_path, boost::barrier* barr, kinect2::StreamBuffer* strbuff, bool recvir){
 
 
   size_t executable_name_idx = program_path.rfind("Protonect");
@@ -844,7 +844,8 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
   usb_loop.start(context);
 
   libfreenect2::FrameMap frames;
-  libfreenect2::FrameListener frame_listener(libfreenect2::Frame::Color | libfreenect2::Frame::Ir | libfreenect2::Frame::Depth);
+  unsigned int frames_types = recvir ? libfreenect2::Frame::Color | libfreenect2::Frame::Ir | libfreenect2::Frame::Depth : libfreenect2::Frame::Color | libfreenect2::Frame::Depth;
+  libfreenect2::FrameListener frame_listener(frames_types);
 
   //libfreenect2::DumpRgbPacketProcessor rgb_processor;
   libfreenect2::TurboJpegRgbPacketProcessor rgb_processor;
@@ -899,43 +900,35 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
 
 
 
-  /*
-  original:
 
-  depth/ir == 512 x 424
 
-  color == 1920 x 1080 -> 1024 x 848
-  
-  */
+  const unsigned s_width_dir = strbuff->width_dir;//512;
+  const unsigned s_height_dir = strbuff->height_dir;//424;
+  const unsigned s_x_c = strbuff->x_c;//390;
+  const unsigned s_y_c = strbuff->y_c;//0;
+  const unsigned s_width_c = strbuff->width_c;//1280;
+  const unsigned s_height_c = strbuff->height_c;//1080;
 
-  const unsigned s_width_dir = 512;
-  const unsigned s_height_dir = 424;
-  const unsigned s_x_c = 390;
-  const unsigned s_y_c = 0;
-  const unsigned s_width_c = 1280;
-  const unsigned s_height_c = 1080;
-
-  const unsigned buff_color_rgb_size_byte = 3 * s_width_c * s_height_c;
-  unsigned char* buff_color_rgb = new unsigned char [buff_color_rgb_size_byte];
-  const unsigned buff_depth_float_size_byte = s_width_dir * s_height_dir * sizeof(float);
-  float* buff_depth_float = new float [s_width_dir * s_height_dir];
-  const unsigned buff_ir_8bit_size_byte = s_width_dir * s_height_dir;
-  unsigned char* buff_ir_8bit = new unsigned char [buff_ir_8bit_size_byte];
+#if 0
+  const unsigned buff_color_rgb_size_byte = strbuff->buff_color_rgb_size_byte;//3 * s_width_c * s_height_c;
+  const unsigned buff_depth_float_size_byte = strbuff->buff_depth_float_size_byte;//s_width_dir * s_height_dir * sizeof(float);
+  const unsigned buff_ir_8bit_size_byte = strbuff->buff_ir_8bit_size_byte;//s_width_dir * s_height_dir;
+#endif
 
   while(!shutdown0 && !shutdown1)
   {
     frame_listener.waitForNewFrame(frames);
 
     libfreenect2::Frame *rgb = frames[libfreenect2::Frame::Color];
-    libfreenect2::Frame *ir = frames[libfreenect2::Frame::Ir];
+    libfreenect2::Frame *ir = 0;
+    if(recvir)
+      ir = frames[libfreenect2::Frame::Ir];
     libfreenect2::Frame *depth = frames[libfreenect2::Frame::Depth];
 
-#if 0
-    //cv::imshow("rgb_orig", cv::Mat(rgb->height, rgb->width, CV_8UC3, rgb->data));
-    cv::imshow("ir_orig", cv::Mat(ir->height, ir->width, CV_32FC1, ir->data) / 20000.0f);
-    cv::imshow("depth_orig", cv::Mat(depth->height, depth->width, CV_32FC1, depth->data) / 4500.0f);
-    //cv::waitKey(1);
-#endif
+    unsigned char* buff_color_rgb = strbuff->getBackRGB();//new unsigned char [buff_color_rgb_size_byte];
+    float* buff_depth_float = strbuff->getBackDepth();//new float [s_width_dir * s_height_dir];
+    unsigned char* buff_ir_8bit = strbuff->getBackIR();//new unsigned char [buff_ir_8bit_size_byte];
+
 
 
     // crop rgb image to new size
@@ -944,12 +937,15 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
       for(int x = (s_width_c - 1); x > -1; --x){
 
 	unsigned rgb_s_pos = (s_x_c + x) * 3 + (s_y_c + y) * 1920 * 3;
+	unsigned char r = rgb->data[rgb_s_pos];++rgb_s_pos;
+	unsigned char g = rgb->data[rgb_s_pos];++rgb_s_pos;
+	unsigned char b = rgb->data[rgb_s_pos];//++rgb_s_pos;
 
-	buff_color_rgb[rgb_t_pos] = rgb->data[rgb_s_pos];
-	++rgb_t_pos;++rgb_s_pos;
-	buff_color_rgb[rgb_t_pos] = rgb->data[rgb_s_pos];
-	++rgb_t_pos;++rgb_s_pos;
-	buff_color_rgb[rgb_t_pos] = rgb->data[rgb_s_pos];
+	buff_color_rgb[rgb_t_pos] = b;
+	++rgb_t_pos;
+	buff_color_rgb[rgb_t_pos] = g;
+	++rgb_t_pos;
+	buff_color_rgb[rgb_t_pos] = r;
 	++rgb_t_pos;
 
       }
@@ -957,14 +953,17 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
 
     // copy depth and ir
     float * depthdata = (float*) depth->data;
-    float * irdata = (float*) ir->data;
+    float * irdata = 0;
+    if(recvir)
+      irdata = (float*) ir->data;
     unsigned t_pos = 0;
     for(unsigned y = 0; y < s_height_dir; ++y){
       for(int x = (s_width_dir - 1); x > -1; --x){
 
 	unsigned pos = x + y * s_width_dir;
-	buff_depth_float[t_pos] = (depthdata[pos])/4500.0f;
-	buff_ir_8bit[t_pos] = (unsigned char) (255.0 * std::min(255.0f,std::max(0.0f,(irdata[pos])/65534.0f)));
+	buff_depth_float[t_pos] = (depthdata[pos])/1000.0f;
+	if(recvir)
+	  buff_ir_8bit[t_pos] = (unsigned char) (255.0 * std::min(255.0f,std::max(0.0f,(irdata[pos])/65534.0f)));
 	++t_pos;
 
       }
@@ -972,18 +971,23 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
 
 #if 1
     cv::imshow((std::string("rgb@") + serial_wanted).c_str(),   cv::Mat(s_height_c, s_width_c, CV_8UC3, buff_color_rgb));
-    cv::imshow((std::string("ir@") + serial_wanted).c_str(),    cv::Mat(s_height_dir, s_width_dir, CV_8UC1, buff_ir_8bit));
-    cv::imshow((std::string("depth@") + serial_wanted).c_str(), cv::Mat(s_height_dir, s_width_dir, CV_32FC1, buff_depth_float));
+    //cv::imshow((std::string("ir@") + serial_wanted).c_str(),    cv::Mat(s_height_dir, s_width_dir, CV_8UC1, buff_ir_8bit));
+    //cv::imshow((std::string("depth@") + serial_wanted).c_str(), cv::Mat(s_height_dir, s_width_dir, CV_32FC1, buff_depth_float));
     cv::waitKey(1);
 #endif
 
+    barr->wait();
+    barr->wait();
+
+
     frame_listener.release(frames);
+
+
+
+
   }
 
 
-  delete [] buff_color_rgb;
-  delete [] buff_depth_float;
-  delete [] buff_ir_8bit;
 
 
   //glfwDestroyWindow(window);
@@ -1033,17 +1037,20 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
 }
 
 
-
+void compress_by_thread(kinect2::StreamBuffer* strbuff){
+  strbuff->compressFrontRGBDXT1();
+}
 
 
 int main(int argc, char *argv[])
 {
 
 
-  //std::string serial_wanted("179625534347");
-  std::string serial_wanted("110356534447");
-  std::string serverport("127.0.0.1:7000");
+  std::string serverport("141.54.147.32:7000");
   bool compressrgb = true;
+  bool senddepth = true;
+  bool sendcolor = true;
+  bool sendir = false;
   CMDParser p("serialA serialB ...");
   p.addOpt("s",1,"serverport", "e.g. 127.0.0.1:7000");
 
@@ -1063,354 +1070,84 @@ int main(int argc, char *argv[])
   // install signal handler now
   signal(SIGINT,sigint_handler);
   const std::vector<std::string>& kinect_serials = p.getArgs();
+  std::vector<kinect2::StreamBuffer*> strbuffs;
+  const unsigned num_kinects = kinect_serials.size();
+  boost::barrier barr(num_kinects + 1);
   std::vector<boost::thread* > k_threads;
-  for(unsigned kinect_num = 0; kinect_num < kinect_serials.size(); ++kinect_num){
+  for(unsigned kinect_num = 0; kinect_num < num_kinects; ++kinect_num){
 
-    k_threads.push_back(new boost::thread(boost::bind(&readloop, kinect_num, kinect_serials[kinect_num], program_path)));
-
+    kinect2::StreamBuffer* strbuff(new kinect2::StreamBuffer);
+    strbuffs.push_back(strbuff);
     sleep(5);
+    k_threads.push_back(new boost::thread(boost::bind(&readloop, kinect_num, kinect_serials[kinect_num], program_path, &barr, strbuff, sendir)));
+
  
   }
 
-  
+
+  zmq::context_t ctx(1); // means single threaded
+
+  zmq::socket_t  socket(ctx, ZMQ_PUB); // means a subscriber
+  uint64_t hwm = 1;
+  socket.setsockopt(ZMQ_HWM,&hwm, sizeof(hwm));
+  std::string endpoint("tcp://" + serverport);
+  socket.bind(endpoint.c_str());
+
+  const unsigned colorsize = compressrgb ? strbuffs[0]->buff_color_rgb_dxt_size_byte : strbuffs[0]->buff_color_rgb_size_byte;
+  const unsigned depthsize = strbuffs[0]->buff_depth_float_size_byte;
 
   while(!shutdown0 && !shutdown1){
-    sleep(1);
-    std::cerr << "sending goes here!" << std::endl;
-  }
 
-  
+    barr.wait();
+    // swap here
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#if 0
-  size_t executable_name_idx = program_path.rfind("Protonect");
-
-  std::string binpath = "/";
-
-  if(executable_name_idx != std::string::npos)
-  {
-    binpath = program_path.substr(0, executable_name_idx);
-  }
-
-  uint16_t vid = 0x045E;
-  uint16_t pid = 0x02C4;
-  uint16_t mi = 0x00;
-
-  bool debug_mode = false;
-
-  libusb_device_handle *handle;
-  libusb_device *dev;
-  uint8_t bus;
-  const char* speed_name[5] =
-  { "Unknown", "1.5 Mbit/s (USB LowSpeed)", "12 Mbit/s (USB FullSpeed)", "480 Mbit/s (USB HighSpeed)", "5000 Mbit/s (USB SuperSpeed)" };
-
-  int r;
-
-  const struct libusb_version* version;
-  version = libusb_get_version();
-  printf("Using libusbx v%d.%d.%d.%d\n\n", version->major, version->minor, version->micro, version->nano);
-
-  r = libusb_init(NULL);
-  if (r < 0)
-    return r;
-
-  libusb_set_debug(NULL, debug_mode ? LIBUSB_LOG_LEVEL_DEBUG : LIBUSB_LOG_LEVEL_INFO);
-
-  printf("Opening device %04X:%04X...\n", vid, pid);
-
-
-  handle = libusb_open_device_with_vid_pid_serial(NULL, vid, pid, serial_wanted);
-  //handle = libusb_open_device_with_vid_pid_num(NULL, vid, pid, 0);
-
-  if (handle == NULL)
-  {
-    perr("  Failed.\n");
-    //system("PAUSE");
-    return -1;
-  }
-
-  dev = libusb_get_device(handle);
-  bus = libusb_get_bus_number(dev);
-  
-   struct libusb_device_descriptor dev_desc;
-
-   printf("\nReading device descriptor:\n");
-   CALL_CHECK(libusb_get_device_descriptor(dev, &dev_desc));
-   printf("            length: %d\n", dev_desc.bLength);
-   printf("      device class: %d\n", dev_desc.bDeviceClass);
-   printf("               S/N: %d\n", dev_desc.iSerialNumber);
-   printf("           VID:PID: %04X:%04X\n", dev_desc.idVendor, dev_desc.idProduct);
-   printf("         bcdDevice: %04X\n", dev_desc.bcdDevice);
-   printf("   iMan:iProd:iSer: %d:%d:%d\n", dev_desc.iManufacturer, dev_desc.iProduct, dev_desc.iSerialNumber);
-   printf("          nb confs: %d\n", dev_desc.bNumConfigurations);
-   
-
-
-
-
-  r = libusb_get_device_speed(dev);
-  if ((r < 0) || (r > 4))
-    r = 0;
-  printf("             speed: %s\n", speed_name[r]);
-
-  int active_cfg = -5;
-  r = libusb_get_configuration(handle, &active_cfg);
-
-  printf("active configuration: %d, err: %d", active_cfg, r);
-  int configId = 1;
-  if (active_cfg != configId)
-  {
-    printf("Setting config: %d\n", configId);
-    r = libusb_set_configuration(handle, configId);
-    if (r != LIBUSB_SUCCESS)
-    {
-      perr("  Can't set configuration. Error code: %d (%s)\n", r, libusb_error_name(r));
-    }
-  }
-
-  int iface = 0;
-  printf("\nClaiming interface %d...\n", iface);
-  r = libusb_claim_interface(handle, iface);
-  if (r != LIBUSB_SUCCESS)
-  {
-    perr("   Failed: %d.\n", r);
-  }
-
-  iface = 1;
-  printf("\nClaiming interface %d...\n", iface);
-  r = libusb_claim_interface(handle, iface);
-  if (r != LIBUSB_SUCCESS)
-  {
-    perr("   Failed: %d.\n", r);
-  }
-
-  InitKinect(handle);
-
-  // install signal handler now
-  signal(SIGINT,sigint_handler);
-  shutdown = false;
-
-  libfreenect2::usb::EventLoop usb_loop;
-  //usb_loop.start();
-  usb_loop.start(context);
-
-  libfreenect2::FrameMap frames;
-  libfreenect2::FrameListener frame_listener(libfreenect2::Frame::Color | libfreenect2::Frame::Ir | libfreenect2::Frame::Depth);
-
-  //libfreenect2::DumpRgbPacketProcessor rgb_processor;
-  libfreenect2::TurboJpegRgbPacketProcessor rgb_processor;
-  rgb_processor.setFrameListener(&frame_listener);
-  libfreenect2::RgbPacketStreamParser rgb_packet_stream_parser(&rgb_processor);
-
-  libfreenect2::usb::BulkTransferPool rgb_bulk_transfers(handle, 0x83);
-  rgb_bulk_transfers.allocate(50, 0x4000);
-  rgb_bulk_transfers.setCallback(&rgb_packet_stream_parser);
-  rgb_bulk_transfers.enableSubmission();
-
-  glfwInit();
-  //glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-  //glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-  //glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-
-  GLFWwindow* window = 0;//glfwCreateWindow(800, 600, "OpenGL", 0, 0); // Windowed
-
-  libfreenect2::OpenGLDepthPacketProcessor depth_processor(window);
-  depth_processor.setFrameListener(&frame_listener);
-  depth_processor.load11To16LutFromFile((binpath + "../11to16.bin").c_str());
-  depth_processor.loadXTableFromFile((binpath + "../xTable.bin").c_str());
-  depth_processor.loadZTableFromFile((binpath + "../zTable.bin").c_str());
-
-  libfreenect2::DepthPacketStreamParser depth_packet_stream_parser(&depth_processor);
-
-  size_t max_packet_size = libusb_get_max_iso_packet_size(dev, 0x84);
-  std::cout << "iso max_packet_size: " << max_packet_size << std::endl;
-
-  libfreenect2::usb::IsoTransferPool depth_iso_transfers(handle, 0x84);
-  depth_iso_transfers.allocate(80, 8, max_packet_size);
-  depth_iso_transfers.setCallback(&depth_packet_stream_parser);
-  depth_iso_transfers.enableSubmission();
-
-  r = libusb_get_device_speed(dev);
-  if ((r < 0) || (r > 4))
-    r = 0;
-  printf("             speed: %s\n", speed_name[r]);
-
-  RunKinect(handle, depth_processor);
-
-  rgb_bulk_transfers.submit(10);
-  depth_iso_transfers.submit(60);
-
-  r = libusb_get_device_speed(dev);
-  if ((r < 0) || (r > 4))
-    r = 0;
-  printf("             speed: %s\n", speed_name[r]);
-
-
-
-
-  /*
-  original:
-
-  depth/ir == 512 x 424
-
-  color == 1920 x 1080 -> 1024 x 848
-  
-  */
-
-  const unsigned s_width_dir = 512;
-  const unsigned s_height_dir = 424;
-  const unsigned s_x_c = 390;
-  const unsigned s_y_c = 0;
-  const unsigned s_width_c = 1280;
-  const unsigned s_height_c = 1080;
-
-  const unsigned buff_color_rgb_size_byte = 3 * s_width_c * s_height_c;
-  unsigned char* buff_color_rgb = new unsigned char [buff_color_rgb_size_byte];
-  const unsigned buff_depth_float_size_byte = s_width_dir * s_height_dir * sizeof(float);
-  float* buff_depth_float = new float [s_width_dir * s_height_dir];
-  const unsigned buff_ir_8bit_size_byte = s_width_dir * s_height_dir;
-  unsigned char* buff_ir_8bit = new unsigned char [buff_ir_8bit_size_byte];
-
-  while(!shutdown)
-  {
-    frame_listener.waitForNewFrame(frames);
-
-    libfreenect2::Frame *rgb = frames[libfreenect2::Frame::Color];
-    libfreenect2::Frame *ir = frames[libfreenect2::Frame::Ir];
-    libfreenect2::Frame *depth = frames[libfreenect2::Frame::Depth];
-
-#if 0
-    //cv::imshow("rgb_orig", cv::Mat(rgb->height, rgb->width, CV_8UC3, rgb->data));
-    cv::imshow("ir_orig", cv::Mat(ir->height, ir->width, CV_32FC1, ir->data) / 20000.0f);
-    cv::imshow("depth_orig", cv::Mat(depth->height, depth->width, CV_32FC1, depth->data) / 4500.0f);
-    //cv::waitKey(1);
-#endif
-
-
-    // crop rgb image to new size
-    unsigned rgb_t_pos = 0;
-    for(unsigned y = 0; y < s_height_c; ++y){
-      for(int x = (s_width_c - 1); x > -1; --x){
-
-	unsigned rgb_s_pos = (s_x_c + x) * 3 + (s_y_c + y) * 1920 * 3;
-
-	buff_color_rgb[rgb_t_pos] = rgb->data[rgb_s_pos];
-	++rgb_t_pos;++rgb_s_pos;
-	buff_color_rgb[rgb_t_pos] = rgb->data[rgb_s_pos];
-	++rgb_t_pos;++rgb_s_pos;
-	buff_color_rgb[rgb_t_pos] = rgb->data[rgb_s_pos];
-	++rgb_t_pos;
-
-      }
+    for(unsigned i = 0; i < strbuffs.size(); ++i){
+      strbuffs[i]->swap();
     }
 
-    // copy depth and ir
-    float * depthdata = (float*) depth->data;
-    float * irdata = (float*) ir->data;
-    unsigned t_pos = 0;
-    for(unsigned y = 0; y < s_height_dir; ++y){
-      for(int x = (s_width_dir - 1); x > -1; --x){
-
-	unsigned pos = x + y * s_width_dir;
-	buff_depth_float[t_pos] = (depthdata[pos])/4500.0f;
-	buff_ir_8bit[t_pos] = (unsigned char) (255.0 * std::min(255.0f,std::max(0.0f,(irdata[pos])/65534.0f)));
-	++t_pos;
-
-      }
-    }
-
+    barr.wait();
 #if 1
-    cv::imshow("rgb",   cv::Mat(s_height_c, s_width_c, CV_8UC3, buff_color_rgb));
-    cv::imshow("ir",    cv::Mat(s_height_dir, s_width_dir, CV_8UC1, buff_ir_8bit));
-    cv::imshow("depth", cv::Mat(s_height_dir, s_width_dir, CV_32FC1, buff_depth_float));
-    cv::waitKey(1);
+    // compress if needed
+    if(compressrgb){
+      boost::thread_group threadGroup;
+      for(unsigned i = 0; i < strbuffs.size(); ++i){
+	threadGroup.create_thread(boost::bind(&compress_by_thread, strbuffs[i]));
+	//strbuffs[i]->compressFrontRGBDXT1();
+      }
+      threadGroup.join_all();
+    }
 #endif
 
-    frame_listener.release(frames);
+
+    // send
+    std::cerr << "sending goes here!" << std::endl;
+
+    zmq::message_t zmqm((colorsize + depthsize) * num_kinects);
+    unsigned offset = 0;
+    for(unsigned i = 0; i < num_kinects; ++i){
+      memcpy( ((unsigned char* ) zmqm.data()) + offset, compressrgb ? strbuffs[i]->getFrontRGBDXT1() : strbuffs[i]->getFrontRGB(), colorsize);
+      offset += colorsize;
+      memcpy( ((unsigned char* ) zmqm.data()) + offset, strbuffs[i]->getFrontDepth(), depthsize);
+      offset += depthsize;
+    }
+
+    socket.send(zmqm);
+
+
+
+
+
+
+
+
+
+
+
   }
 
-
-  delete [] buff_color_rgb;
-  delete [] buff_depth_float;
-  delete [] buff_ir_8bit;
+  // free memory here
 
 
-  //glfwDestroyWindow(window);
-
-  r = libusb_get_device_speed(dev);
-  if ((r < 0) || (r > 4))
-    r = 0;
-  printf("             speed: %s\n", speed_name[r]);
-
-  rgb_bulk_transfers.disableSubmission();
-  depth_iso_transfers.disableSubmission();
-
-  CloseKinect(handle);
-
-  rgb_bulk_transfers.cancel();
-  depth_iso_transfers.cancel();
-
-  // wait for all transfers to cancel
-  // TODO: better implementation
-  libfreenect2::this_thread::sleep_for(libfreenect2::chrono::seconds(2));
-
-  rgb_bulk_transfers.deallocate();
-  depth_iso_transfers.deallocate();
-
-  r = libusb_get_device_speed(dev);
-  if ((r < 0) || (r > 4))
-    r = 0;
-  printf("             speed: %s\n", speed_name[r]);
-
-  iface = 0;
-  printf("Releasing interface %d...\n", iface);
-  libusb_release_interface(handle, iface);
-
-  iface = 1;
-  printf("Releasing interface %d...\n", iface);
-  libusb_release_interface(handle, iface);
-
-  printf("Closing device...\n");
-  libusb_close(handle);
-
-  usb_loop.stop();
-
-  libusb_exit(context);//libusb_exit(NULL);
-
-#endif
 
   return 0;
 }
