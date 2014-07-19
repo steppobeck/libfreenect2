@@ -969,7 +969,7 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
       }
     }
 
-#if 1
+#if 0
     cv::imshow((std::string("rgb@") + serial_wanted).c_str(),   cv::Mat(s_height_c, s_width_c, CV_8UC3, buff_color_rgb));
     //cv::imshow((std::string("ir@") + serial_wanted).c_str(),    cv::Mat(s_height_dir, s_width_dir, CV_8UC1, buff_ir_8bit));
     //cv::imshow((std::string("depth@") + serial_wanted).c_str(), cv::Mat(s_height_dir, s_width_dir, CV_32FC1, buff_depth_float));
