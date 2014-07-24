@@ -930,6 +930,7 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
     unsigned char* buff_ir_8bit = strbuff->getBackIR();//new unsigned char [buff_ir_8bit_size_byte];
 
 
+    // -------------------- NOTE: could do this in parralel using boost::threadgroup
 
     // crop rgb image to new size
     unsigned rgb_t_pos = 0;
@@ -1053,11 +1054,20 @@ int main(int argc, char *argv[])
   bool sendir = false;
   CMDParser p("serialA serialB ...");
   p.addOpt("s",1,"serverport", "e.g. 127.0.0.1:7000");
-
+  p.addOpt("n",-1,"nocompress", "do not compress color, default: compression enabled");
+  p.addOpt("i",-1,"infrared", "do send infrared, default: no infrared is sended");
   p.init(argc,argv);
 
   if(p.isOptSet("s")){
     serverport = p.getOptsString("s")[0];
+  }
+
+  if(p.isOptSet("n")){
+    compressrgb = false;
+  }
+
+  if(p.isOptSet("i")){
+    sendir = true;
   }
 
 
@@ -1093,8 +1103,14 @@ int main(int argc, char *argv[])
   std::string endpoint("tcp://" + serverport);
   socket.bind(endpoint.c_str());
 
-  const unsigned colorsize = compressrgb ? strbuffs[0]->buff_color_rgb_dxt_size_byte : strbuffs[0]->buff_color_rgb_size_byte;
-  const unsigned depthsize = strbuffs[0]->buff_depth_float_size_byte;
+  const unsigned colorsize  = compressrgb ? strbuffs[0]->buff_color_rgb_dxt_size_byte : strbuffs[0]->buff_color_rgb_size_byte;
+  const unsigned depthsize  = strbuffs[0]->buff_depth_float_size_byte;
+  const unsigned irsizebyte = strbuffs[0]->buff_ir_8bit_size_byte;
+
+  unsigned msizebyte((colorsize + depthsize) * num_kinects);
+  if(sendir){
+    msizebyte += irsizebyte;
+  }
 
   while(!shutdown0 && !shutdown1){
 
@@ -1120,15 +1136,20 @@ int main(int argc, char *argv[])
 
 
     // send
-    std::cerr << "sending goes here!" << std::endl;
+    //std::cerr << "sending goes here!" << std::endl;
+    
 
-    zmq::message_t zmqm((colorsize + depthsize) * num_kinects);
+    zmq::message_t zmqm(msizebyte);
     unsigned offset = 0;
     for(unsigned i = 0; i < num_kinects; ++i){
       memcpy( ((unsigned char* ) zmqm.data()) + offset, compressrgb ? strbuffs[i]->getFrontRGBDXT1() : strbuffs[i]->getFrontRGB(), colorsize);
       offset += colorsize;
       memcpy( ((unsigned char* ) zmqm.data()) + offset, strbuffs[i]->getFrontDepth(), depthsize);
       offset += depthsize;
+      if(sendir){
+	memcpy( ((unsigned char* ) zmqm.data()) + offset, strbuffs[i]->getFrontIR(), irsizebyte);
+	offset += irsizebyte;
+      }
     }
 
     socket.send(zmqm);
