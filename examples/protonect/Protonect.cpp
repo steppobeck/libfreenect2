@@ -621,13 +621,18 @@ void CloseKinect(libusb_device_handle *handle)
   r = KSetSensorStatus(handle, KSENSOR_DISABLE);
 }
 
+
 bool shutdown0 = false;
 bool shutdown1 = false;
 
+
+bool shutdown0_t = false;
+bool shutdown1_t = false;
+
 void sigint_handler(int s)
 {
-  shutdown0 = true;
-  shutdown1 = true;
+  shutdown0_t = true;
+  shutdown1_t = true;
 }
 
 
@@ -915,7 +920,7 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
   const unsigned buff_ir_8bit_size_byte = strbuff->buff_ir_8bit_size_byte;//s_width_dir * s_height_dir;
 #endif
 
-  while(!shutdown0 && !shutdown1)
+  while(!shutdown0_t && !shutdown1_t)
   {
     frame_listener.waitForNewFrame(frames);
 
@@ -988,7 +993,8 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
 
   }
 
-
+  std::cerr << "--------------------------------------------------" << std::endl;
+  //!shutdown0 && !shutdown1
 
 
   //glfwDestroyWindow(window);
@@ -1033,7 +1039,10 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
 
   //libusb_exit(NULL);
   libusb_exit(context);
+  printf("EXITING...\n");
 
+  sleep(5);
+  exit(0);
   return 0;
 }
 
