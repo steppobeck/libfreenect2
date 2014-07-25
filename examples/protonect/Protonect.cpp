@@ -1065,6 +1065,7 @@ int main(int argc, char *argv[])
   p.addOpt("s",1,"serverport", "e.g. 127.0.0.1:7000");
   p.addOpt("n",-1,"nocompress", "do not compress color, default: compression enabled");
   p.addOpt("i",-1,"infrared", "do send infrared, default: no infrared is sended");
+  p.addOpt("c", 1, "calibmode", "enable calib mode in server mode e.g. 127.0.0.1:7001");
   p.init(argc,argv);
 
   if(p.isOptSet("s")){
@@ -1077,6 +1078,13 @@ int main(int argc, char *argv[])
 
   if(p.isOptSet("i")){
     sendir = true;
+  }
+
+  bool calibmode = false;
+  std::string serverport_cm("127.0.0.1:7001");
+  if (p.isOptSet("c")){
+    calibmode = true;
+    serverport_cm = p.getOptsString("c")[0];
   }
 
 
@@ -1098,7 +1106,7 @@ int main(int argc, char *argv[])
     kinect2::StreamBuffer* strbuff(new kinect2::StreamBuffer);
     strbuffs.push_back(strbuff);
     sleep(5);
-    k_threads.push_back(new boost::thread(boost::bind(&readloop, kinect_num, kinect_serials[kinect_num], program_path, &barr, strbuff, sendir)));
+    k_threads.push_back(new boost::thread(boost::bind(&readloop, kinect_num, kinect_serials[kinect_num], program_path, &barr, strbuff, sendir || calibmode)));
 
  
   }
@@ -1120,6 +1128,24 @@ int main(int argc, char *argv[])
   if(sendir){
     msizebyte += irsizebyte;
   }
+
+  unsigned colorsize_cm = strbuffs[0]->buff_color_rgb_size_byte;
+  unsigned msizebyte_cm((colorsize_cm + depthsize + irsizebyte) * num_kinects);
+
+  zmq::context_t* ctx_cm = 0;
+  zmq::socket_t*  socket_cm = 0;
+  if (calibmode){
+    ctx_cm = new zmq::context_t(1); // means single threaded
+    socket_cm = new zmq::socket_t(*ctx_cm, ZMQ_PUB); // means a subscriber
+    uint64_t hwm = 1;
+    socket_cm->setsockopt(ZMQ_HWM, &hwm, sizeof(hwm));
+    std::string endpoint("tcp://" + serverport_cm);
+    socket_cm->bind(endpoint.c_str());
+  }
+
+
+
+
 
   while(!shutdown0 && !shutdown1){
 
@@ -1165,6 +1191,25 @@ int main(int argc, char *argv[])
 
 
 
+    if (calibmode){
+
+      zmq::message_t zmqm_cm(msizebyte_cm);
+      unsigned offset = 0;
+      for (unsigned i = 0; i < num_kinects; ++i){
+
+        memcpy(((unsigned char*)zmqm_cm.data() + offset), strbuffs[i]->getFrontRGB(), colorsize_cm);
+
+        offset += colorsize_cm;
+
+        memcpy(((unsigned char*)zmqm_cm.data() + offset), strbuffs[i]->getFrontDepth(), depthsize);
+        offset += depthsize;
+
+        memcpy(((unsigned char*)zmqm_cm.data() + offset), strbuffs[i]->getFrontIR(), irsizebyte);
+        offset += irsizebyte;
+
+      }
+      socket_cm->send(zmqm_cm);
+    }
 
 
 
