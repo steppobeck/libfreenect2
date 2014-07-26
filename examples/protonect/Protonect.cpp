@@ -982,13 +982,13 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
     cv::waitKey(1);
 #endif
 
-    barr->wait();
-    barr->wait();
+
 
 
     frame_listener.release(frames);
 
-
+    barr->wait();
+    barr->wait();
 
 
   }
