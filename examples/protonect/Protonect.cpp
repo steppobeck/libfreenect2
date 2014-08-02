@@ -55,6 +55,8 @@
 #include <CMDParser.h>
 #include <zmq.hpp>
 #include <StreamBuffer.h>
+#include <ARTListener.h>
+
 
 #include <boost/thread/thread.hpp>
 #include <boost/thread/barrier.hpp>
@@ -1055,7 +1057,7 @@ void compress_by_thread(kinect2::StreamBuffer* strbuff){
 int main(int argc, char *argv[])
 {
 
-
+  kinect::ARTListener* artl = 0;
   std::string serverport("141.54.147.32:7000");
   bool compressrgb = true;
   bool senddepth = true;
@@ -1066,6 +1068,7 @@ int main(int argc, char *argv[])
   p.addOpt("n",-1,"nocompress", "do not compress color, default: compression enabled");
   p.addOpt("i",-1,"infrared", "do send infrared, default: no infrared is sended");
   p.addOpt("c", 1, "calibmode", "enable calib mode in server mode e.g. 127.0.0.1:7001");
+  p.addOpt("a",1,"artport", "e.g. 5000");
   p.init(argc,argv);
 
   if(p.isOptSet("s")){
@@ -1087,7 +1090,11 @@ int main(int argc, char *argv[])
     serverport_cm = p.getOptsString("c")[0];
   }
 
-
+  if(p.isOptSet("a")){
+    unsigned artport = p.getOptsInt("a")[0];
+    artl = new kinect::ARTListener();
+    artl->open(artport);
+  }
 
 
 
@@ -1157,6 +1164,11 @@ int main(int argc, char *argv[])
     }
 
     barr.wait();
+
+    if(artl){
+      artl->listen();
+    }
+
 #if 1
     // compress if needed
     if(compressrgb){
@@ -1185,6 +1197,10 @@ int main(int argc, char *argv[])
 	memcpy( ((unsigned char* ) zmqm.data()) + offset, strbuffs[i]->getFrontIR(), irsizebyte);
 	offset += irsizebyte;
       }
+    }
+
+    if(artl){
+      artl->fill(zmqm.data());
     }
 
     socket.send(zmqm);
