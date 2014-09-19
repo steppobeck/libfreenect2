@@ -1063,12 +1063,14 @@ int main(int argc, char *argv[])
   bool senddepth = true;
   bool sendcolor = true;
   bool sendir = false;
+  bool fake = false;
   CMDParser p("serialA serialB ...");
   p.addOpt("s",1,"serverport", "e.g. 127.0.0.1:7000");
   p.addOpt("n",-1,"nocompress", "do not compress color, default: compression enabled");
   p.addOpt("i",-1,"infrared", "do send infrared, default: no infrared is sended");
   p.addOpt("c", 1, "calibmode", "enable calib mode in server mode e.g. 127.0.0.1:7001");
   p.addOpt("a",1,"artport", "e.g. 5000");
+  p.addOpt("f",-1,"fake", "fake a second kinect");
   p.init(argc,argv);
 
   if(p.isOptSet("s")){
@@ -1096,7 +1098,9 @@ int main(int argc, char *argv[])
     artl->open(artport);
   }
 
-
+  if (p.isOptSet("f")){
+    fake = true;
+  }
 
   
   std::string program_path(argv[0]);
@@ -1186,7 +1190,7 @@ int main(int argc, char *argv[])
     //std::cerr << "sending goes here!" << std::endl;
     
 
-    zmq::message_t zmqm(msizebyte);
+    zmq::message_t zmqm(fake ? msizebyte * 2 : msizebyte);
     unsigned offset = 0;
     for(unsigned i = 0; i < num_kinects; ++i){
       memcpy( ((unsigned char* ) zmqm.data()) + offset, compressrgb ? strbuffs[i]->getFrontRGBDXT1() : strbuffs[i]->getFrontRGB(), colorsize);
