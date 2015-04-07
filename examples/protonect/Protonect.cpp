@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <iostream>
+#include <fstream>
 
 #define GLEW_STATIC
 #include <GL/glew.h>
@@ -1063,12 +1064,16 @@ int main(int argc, char *argv[])
   bool senddepth = true;
   bool sendcolor = true;
   bool sendir = false;
+  int writeir = 0;
+  std::ofstream* irframes = 0;
   CMDParser p("serialA serialB ...");
   p.addOpt("s",1,"serverport", "e.g. 127.0.0.1:7000");
   p.addOpt("n",-1,"nocompress", "do not compress color, default: compression enabled");
   p.addOpt("i",-1,"infrared", "do send infrared, default: no infrared is sended");
   p.addOpt("c", 1, "calibmode", "enable calib mode in server mode e.g. 127.0.0.1:7001");
   p.addOpt("a",1,"artport", "e.g. 5000");
+  p.addOpt("t", 1, "trackingmode", "enable tracking mode in server mode e.g. 127.0.0.1:7002");
+  p.addOpt("w", 1, "writeir", "write numframes of infra red images to irframes.bin");
   p.init(argc,argv);
 
   if(p.isOptSet("s")){
@@ -1083,12 +1088,26 @@ int main(int argc, char *argv[])
     sendir = true;
   }
 
+  if(p.isOptSet("w")){
+    sendir = true;
+    writeir = p.getOptsInt("w")[0];
+    irframes = new std::ofstream("irframes.bin", std::ofstream::binary);
+  }
+
   bool calibmode = false;
   std::string serverport_cm("127.0.0.1:7001");
   if (p.isOptSet("c")){
     calibmode = true;
     serverport_cm = p.getOptsString("c")[0];
   }
+
+  bool trackingmode = false;
+  std::string serverport_tm("127.0.0.1:7002");
+  if (p.isOptSet("t")){
+    trackingmode = true;
+    serverport_tm = p.getOptsString("t")[0];
+  }
+
 
   if(p.isOptSet("a")){
     unsigned artport = p.getOptsInt("a")[0];
@@ -1113,7 +1132,7 @@ int main(int argc, char *argv[])
     kinect2::StreamBuffer* strbuff(new kinect2::StreamBuffer);
     strbuffs.push_back(strbuff);
     sleep(5);
-    k_threads.push_back(new boost::thread(boost::bind(&readloop, kinect_num, kinect_serials[kinect_num], program_path, &barr, strbuff, sendir || calibmode)));
+    k_threads.push_back(new boost::thread(boost::bind(&readloop, kinect_num, kinect_serials[kinect_num], program_path, &barr, strbuff, sendir || calibmode || trackingmode)));
 
  
   }
@@ -1133,7 +1152,7 @@ int main(int argc, char *argv[])
 
   unsigned msizebyte((colorsize + depthsize) * num_kinects);
   if(sendir){
-    msizebyte += irsizebyte;
+    msizebyte += (num_kinects * irsizebyte);
   }
 
   unsigned colorsize_cm = strbuffs[0]->buff_color_rgb_size_byte;
@@ -1151,6 +1170,17 @@ int main(int argc, char *argv[])
   }
 
 
+  unsigned msizebyte_tm((depthsize + irsizebyte) * num_kinects);
+  zmq::context_t* ctx_tm = 0;
+  zmq::socket_t*  socket_tm = 0;
+  if (trackingmode){
+    ctx_tm = new zmq::context_t(1); // means single threaded
+    socket_tm = new zmq::socket_t(*ctx_tm, ZMQ_PUB); // means a subscriber
+    uint64_t hwm = 1;
+    socket_tm->setsockopt(ZMQ_HWM, &hwm, sizeof(hwm));
+    std::string endpoint("tcp://" + serverport_tm);
+    socket_tm->bind(endpoint.c_str());
+  }
 
 
 
@@ -1196,8 +1226,28 @@ int main(int argc, char *argv[])
       if(sendir){
 	memcpy( ((unsigned char* ) zmqm.data()) + offset, strbuffs[i]->getFrontIR(), irsizebyte);
 	offset += irsizebyte;
+#if 1
+	if(writeir > 0){
+	  
+	  irframes->write((const char*) strbuffs[i]->getFrontIR(), irsizebyte);
+	  
+	}
+#endif
       }
     }
+    
+    
+#if 1
+    if(irframes){
+      std::cout << "!!!!!!!!!!!!!!!!AFTER!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!: " << writeir << std::endl;
+      --writeir;
+      if(writeir <= 0){
+	irframes->close();
+	shutdown0 = true;
+	shutdown1 = true;
+      }
+    }
+#endif
 
     if(artl){
       artl->fill(zmqm.data());
@@ -1228,6 +1278,21 @@ int main(int argc, char *argv[])
     }
 
 
+    if (trackingmode){
+
+      zmq::message_t zmqm_tm(msizebyte_tm);
+      unsigned offset = 0;
+      for (unsigned i = 0; i < num_kinects; ++i){
+
+        memcpy(((unsigned char*)zmqm_tm.data() + offset), strbuffs[i]->getFrontDepth(), depthsize);
+        offset += depthsize;
+
+        memcpy(((unsigned char*)zmqm_tm.data() + offset), strbuffs[i]->getFrontIR(), irsizebyte);
+        offset += irsizebyte;
+
+      }
+      socket_tm->send(zmqm_tm);
+    }
 
 
 
