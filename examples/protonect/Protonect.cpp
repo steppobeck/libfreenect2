@@ -57,7 +57,7 @@
 #include <zmq.hpp>
 #include <StreamBuffer.h>
 #include <ARTListener.h>
-
+#include <MultiRGBDStreamServer.h>
 
 #include <boost/thread/thread.hpp>
 #include <boost/thread/barrier.hpp>
@@ -1060,10 +1060,12 @@ int main(int argc, char *argv[])
 
   kinect::ARTListener* artl = 0;
   std::string serverport("141.54.147.32:7000");
+  std::string serverport_enc("141.54.147.32:7001");
   bool compressrgb = true;
   bool senddepth = true;
   bool sendcolor = true;
   bool sendir = false;
+  bool use_rgbd_compression = false;
 
   int writeir = 0;
   std::ofstream* irframes = 0;
@@ -1081,6 +1083,8 @@ int main(int argc, char *argv[])
   p.addOpt("w", 1, "writeir", "write numframes of infra red images to irframes.bin");
 
   p.addOpt("f",-1,"fake", "fake a second kinect");
+
+  p.addOpt("e",1,"encoderfeedbackserverport", "e.g. 127.0.0.1:7001");
 
   p.init(argc,argv);
 
@@ -1127,6 +1131,10 @@ int main(int argc, char *argv[])
     fake = true;
   }
 
+  if(p.isOptSet("e")){
+    serverport_enc = p.getOptsString("e")[0];
+    use_rgbd_compression = true;
+  }
   
   std::string program_path(argv[0]);
 
@@ -1147,6 +1155,28 @@ int main(int argc, char *argv[])
  
   }
 
+  const unsigned colorsize  = compressrgb ? strbuffs[0]->buff_color_rgb_dxt_size_byte : strbuffs[0]->buff_color_rgb_size_byte;
+  const unsigned depthsize  = strbuffs[0]->buff_depth_float_size_byte;
+  const unsigned irsizebyte = strbuffs[0]->buff_ir_8bit_size_byte;
+
+  // ---------------------------- begin new for RGBDCompression
+  
+  if(use_rgbd_compression){
+    // init server
+    kinect::MultiRGBDStreamServer enc(serverport,
+				      num_kinects,
+				      strbuffs[0]->width_c,
+				      strbuffs[0]->height_c,
+				      colorsize,
+				      strbuffs[0]->width_dir,
+				      strbuffs[0]->height_dir);
+
+
+
+  }
+  // ---------------------------- end new for RGBDCompression
+
+
 
   zmq::context_t ctx(1); // means single threaded
 
@@ -1156,9 +1186,7 @@ int main(int argc, char *argv[])
   std::string endpoint("tcp://" + serverport);
   socket.bind(endpoint.c_str());
 
-  const unsigned colorsize  = compressrgb ? strbuffs[0]->buff_color_rgb_dxt_size_byte : strbuffs[0]->buff_color_rgb_size_byte;
-  const unsigned depthsize  = strbuffs[0]->buff_depth_float_size_byte;
-  const unsigned irsizebyte = strbuffs[0]->buff_ir_8bit_size_byte;
+
 
   unsigned msizebyte((colorsize + depthsize) * num_kinects);
   if(sendir){
