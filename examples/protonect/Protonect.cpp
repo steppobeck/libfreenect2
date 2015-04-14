@@ -58,6 +58,7 @@
 #include <StreamBuffer.h>
 #include <ARTListener.h>
 #include <MultiRGBDStreamServer.h>
+#include <MultiRGBDStreamHeader.h>
 
 #include <boost/thread/thread.hpp>
 #include <boost/thread/barrier.hpp>
@@ -1171,8 +1172,71 @@ int main(int argc, char *argv[])
 				      strbuffs[0]->width_dir,
 				      strbuffs[0]->height_dir);
 
+    zmq::context_t ctx_enc(1); // means single threaded
+    zmq::socket_t  socket_enc(ctx_enc, ZMQ_SUB); // means a subscriber
+    socket_enc.setsockopt(ZMQ_SUBSCRIBE, "", 0);
+    uint64_t hwm = 1;
+    socket_enc.setsockopt(ZMQ_HWM,&hwm, sizeof(hwm));
+    std::string endpoint("tcp://" + serverport_enc);
+    socket_enc.connect(endpoint.c_str());
+    kinect::MultiRGBDStreamHeader quality_control(num_kinects);
+    for(unsigned i = 0; i != quality_control.streams.size(); ++i){
+      quality_control.streams[i].color_quality      = 0;
+      quality_control.streams[i].depth_quality      = 0;
+    }
 
 
+
+
+    while(!shutdown0 && !shutdown1){
+
+      barr.wait();
+      // swap here
+
+      for(unsigned i = 0; i < strbuffs.size(); ++i){
+	strbuffs[i]->swap();
+      }
+
+      barr.wait();
+
+      if(artl){
+	artl->listen();
+      }
+
+#if 1
+      // compress if needed
+      if(compressrgb){
+	boost::thread_group threadGroup;
+	for(unsigned i = 0; i < strbuffs.size(); ++i){
+	  threadGroup.create_thread(boost::bind(&compress_by_thread, strbuffs[i]));
+	  //strbuffs[i]->compressFrontRGBDXT1();
+	}
+	threadGroup.join_all();
+      }
+#endif
+
+
+      // receive feedback from client
+      const unsigned size_byte(quality_control.calcHeaderSizeByte());
+      zmq::message_t zmqm_enc;
+      socket_enc.recv(&zmqm_enc, ZMQ_NOBLOCK);
+      if(zmqm_enc.size() == size_byte){
+	memcpy((unsigned char*) quality_control.streams.data(), (unsigned char*) zmqm_enc.data(), size_byte);
+      }
+
+      // send
+      //std::cerr << "sending goes here!" << std::endl;
+    
+      for(unsigned i = 0; i < num_kinects; ++i){
+	enc.fillColor((unsigned char*) compressrgb ? strbuffs[i]->getFrontRGBDXT1() : strbuffs[i]->getFrontRGB(), i, quality_control.streams[i].color_quality);
+	enc.fillDepth((float*) strbuffs[i]->getFrontDepth(), i, quality_control.streams[i].depth_quality);
+      }
+
+      enc.startEncode();
+      enc.waitAndSend();
+      
+    }
+    
   }
   // ---------------------------- end new for RGBDCompression
 
