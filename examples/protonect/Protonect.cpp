@@ -1191,12 +1191,9 @@ int main(int argc, char *argv[])
     while(!shutdown0 && !shutdown1){
 
       barr.wait();
-      // swap here
-
       for(unsigned i = 0; i < strbuffs.size(); ++i){
 	strbuffs[i]->swap();
       }
-
       barr.wait();
 
       if(artl){
@@ -1228,8 +1225,8 @@ int main(int argc, char *argv[])
       //std::cerr << "sending goes here!" << std::endl;
     
       for(unsigned i = 0; i < num_kinects; ++i){
-	enc.fillColor((unsigned char*) compressrgb ? strbuffs[i]->getFrontRGBDXT1() : strbuffs[i]->getFrontRGB(), i, quality_control.streams[i].color_quality);
-	enc.fillDepth((float*) strbuffs[i]->getFrontDepth(), i, quality_control.streams[i].depth_quality);
+	enc.fillColor((unsigned char*) compressrgb ? strbuffs[i]->getFrontRGBDXT1() : strbuffs[i]->getFrontRGB(), i, quality_control.streams[i].color_quality, quality_control.streams[i].color_size_byte);
+	enc.fillDepth((float*) strbuffs[i]->getFrontDepth(), i, quality_control.streams[i].depth_quality, quality_control.streams[i].color_size_byte);
       }
 
       enc.startEncode();
