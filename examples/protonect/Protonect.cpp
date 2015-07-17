@@ -57,6 +57,8 @@
 #include <zmq.hpp>
 #include <StreamBuffer.h>
 #include <ARTListener.h>
+#include <gloost/Point3.h>
+#include <gloost/Vector3.h>
 #include <MultiRGBDStreamServer.h>
 #include <MultiRGBDStreamHeader.h>
 
@@ -736,7 +738,7 @@ libusb_device_handle* libusb_open_device_with_vid_pid_serial(libusb_context *ctx
 
 
 
-int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::string& program_path, boost::barrier* barr, kinect2::StreamBuffer* strbuff, bool recvir){
+int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::string& program_path, boost::barrier* barr, kinect2::StreamBuffer* strbuff, bool recvir, bool devversion){
 
 
   size_t executable_name_idx = program_path.rfind("Protonect");
@@ -748,10 +750,13 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
     binpath = program_path.substr(0, executable_name_idx);
   }
 
+
   uint16_t vid = 0x045E;
   uint16_t pid = 0x02C4;
   uint16_t mi = 0x00;
-
+  if(!devversion){
+    pid = 0x02D8;
+  }
   
 
   libusb_device_handle *handle;
@@ -1067,11 +1072,14 @@ int main(int argc, char *argv[])
   bool sendcolor = true;
   bool sendir = false;
   bool use_rgbd_compression = false;
-
+  bool devversion = true;
   int writeir = 0;
   std::ofstream* irframes = 0;
 
   bool fake = false;
+
+  int write_calib = 0;
+  std::ofstream* calib_frames = 0;
 
   CMDParser p("serialA serialB ...");
   p.addOpt("s",1,"serverport", "e.g. 127.0.0.1:7000");
@@ -1082,10 +1090,13 @@ int main(int argc, char *argv[])
 
   p.addOpt("t", 1, "trackingmode", "enable tracking mode in server mode e.g. 127.0.0.1:7002");
   p.addOpt("w", 1, "writeir", "write numframes of infra red images to irframes.bin");
+  p.addOpt("x", 2, "xcalib", "write numframes of matrix pose, color depth and infra red images to filename");
 
   p.addOpt("f",-1,"fake", "fake a second kinect");
 
   p.addOpt("e",1,"encoderfeedbackserverport", "e.g. 127.0.0.1:7001");
+
+  p.addOpt("r",-1,"release", "use release version of Kinect V2");
 
   p.init(argc,argv);
 
@@ -1105,6 +1116,14 @@ int main(int argc, char *argv[])
     sendir = true;
     writeir = p.getOptsInt("w")[0];
     irframes = new std::ofstream("irframes.bin", std::ofstream::binary);
+  }
+
+  if(p.isOptSet("x")){
+    sendir = true;
+    compressrgb = false;
+    write_calib = p.getOptsInt("x")[0];
+    calib_frames = new std::ofstream(p.getOptsString("x")[1].c_str(), std::ofstream::binary);
+    calib_frames->write((const char*) &write_calib, sizeof(int));
   }
 
   bool calibmode = false;
@@ -1132,6 +1151,10 @@ int main(int argc, char *argv[])
     fake = true;
   }
 
+  if (p.isOptSet("r")){
+    devversion = false;
+  }
+
   if(p.isOptSet("e")){
     serverport_enc = p.getOptsString("e")[0];
     use_rgbd_compression = true;
@@ -1151,7 +1174,7 @@ int main(int argc, char *argv[])
     kinect2::StreamBuffer* strbuff(new kinect2::StreamBuffer);
     strbuffs.push_back(strbuff);
     sleep(5);
-    k_threads.push_back(new boost::thread(boost::bind(&readloop, kinect_num, kinect_serials[kinect_num], program_path, &barr, strbuff, sendir || calibmode || trackingmode)));
+    k_threads.push_back(new boost::thread(boost::bind(&readloop, kinect_num, kinect_serials[kinect_num], program_path, &barr, strbuff, sendir || calibmode || trackingmode, devversion)));
 
  
   }
@@ -1281,8 +1304,7 @@ int main(int argc, char *argv[])
     socket_tm->bind(endpoint.c_str());
   }
 
-
-
+  gloost::Matrix last_art_target_pose;
   while(!shutdown0 && !shutdown1){
 
     barr.wait();
@@ -1327,12 +1349,35 @@ int main(int argc, char *argv[])
 	offset += irsizebyte;
 #if 1
 	if(writeir > 0){
-	  
 	  irframes->write((const char*) strbuffs[i]->getFrontIR(), irsizebyte);
-	  
 	}
 #endif
       }
+
+
+      if(write_calib > 0){
+	// get art target number 6
+	gloost::Matrix art_target_pose(artl->listen(6));
+	gloost::Point3 last_pose = last_art_target_pose * gloost::Point3(0.0,0.0,0.0);
+	gloost::Point3 curr_pose = art_target_pose * gloost::Point3(0.0,0.0,0.0);
+	const bool valid = true;//(curr_pose - last_pose).length() < 0.005 ? true : false;
+	last_art_target_pose = art_target_pose;
+	if(valid){
+	  calib_frames->write((const char*) art_target_pose.data(), sizeof(gloost::Matrix));
+	  calib_frames->write((const char*) strbuffs[i]->getFrontRGB(), colorsize);
+	  calib_frames->write((const char*) strbuffs[i]->getFrontDepth(), depthsize);
+	  calib_frames->write((const char*) strbuffs[i]->getFrontIR(), irsizebyte);
+	  std::cerr << "sweep frames remaining: " << write_calib << std::endl;
+	  --write_calib;
+	}
+	if(write_calib <= 0){
+	  calib_frames->close();
+	  shutdown0 = true;
+	  shutdown1 = true;
+	}
+      }
+      
+      
     }
     
     
@@ -1347,6 +1392,9 @@ int main(int argc, char *argv[])
       }
     }
 #endif
+
+
+
 
     if(artl){
       artl->fill(zmqm.data());
@@ -1392,9 +1440,6 @@ int main(int argc, char *argv[])
       }
       socket_tm->send(zmqm_tm);
     }
-
-
-
 
 
 
