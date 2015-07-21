@@ -57,6 +57,7 @@
 #include <zmq.hpp>
 #include <StreamBuffer.h>
 #include <ARTListener.h>
+#include <ChronoMeter.h>
 #include <gloost/Point3.h>
 #include <gloost/Vector3.h>
 #include <MultiRGBDStreamServer.h>
@@ -1063,7 +1064,7 @@ void compress_by_thread(kinect2::StreamBuffer* strbuff){
 
 int main(int argc, char *argv[])
 {
-
+  
   kinect::ARTListener* artl = 0;
   std::string serverport("141.54.147.32:7000");
   std::string serverport_enc("141.54.147.32:7001");
@@ -1081,6 +1082,12 @@ int main(int argc, char *argv[])
   int write_calib = 0;
   std::ofstream* calib_frames = 0;
 
+  int write_sweep = 0;
+  unsigned sweep_id(6);
+  std::string    sweep_filename;
+  std::ofstream* sweep_frames = 0;
+  kinect::ChronoMeter* cmeter = 0;
+
   CMDParser p("serialA serialB ...");
   p.addOpt("s",1,"serverport", "e.g. 127.0.0.1:7000");
   p.addOpt("n",-1,"nocompress", "do not compress color, default: compression enabled");
@@ -1091,6 +1098,7 @@ int main(int argc, char *argv[])
   p.addOpt("t", 1, "trackingmode", "enable tracking mode in server mode e.g. 127.0.0.1:7002");
   p.addOpt("w", 1, "writeir", "write numframes of infra red images to irframes.bin");
   p.addOpt("x", 2, "xcalib", "write numframes of matrix pose, color depth and infra red images to filename");
+  p.addOpt("y", 2, "ysweep", "write numframes of matrix pose, color depth and infra red images to filenamebase");
 
   p.addOpt("f",-1,"fake", "fake a second kinect");
 
@@ -1126,6 +1134,17 @@ int main(int argc, char *argv[])
     calib_frames->write((const char*) &write_calib, sizeof(int));
   }
 
+  if(p.isOptSet("y")){
+    sendir = true;
+    compressrgb = false;
+    write_sweep = p.getOptsInt("y")[0];
+    sweep_filename = p.getOptsString("y")[1];
+    sweep_frames = new std::ofstream(sweep_filename.c_str(), std::ofstream::binary);
+    sweep_filename = sweep_filename + ".pose";
+    cmeter = new kinect::ChronoMeter;
+  }
+
+
   bool calibmode = false;
   std::string serverport_cm("127.0.0.1:7001");
   if (p.isOptSet("c")){
@@ -1140,13 +1159,6 @@ int main(int argc, char *argv[])
     serverport_tm = p.getOptsString("t")[0];
   }
 
-
-  if(p.isOptSet("a")){
-    unsigned artport = p.getOptsInt("a")[0];
-    artl = new kinect::ARTListener();
-    artl->open(artport);
-  }
-
   if (p.isOptSet("f")){
     fake = true;
   }
@@ -1159,6 +1171,18 @@ int main(int argc, char *argv[])
     serverport_enc = p.getOptsString("e")[0];
     use_rgbd_compression = true;
   }
+
+  if(p.isOptSet("a")){
+    unsigned artport = p.getOptsInt("a")[0];
+    artl = new kinect::ARTListener();
+    if(sweep_frames != 0){
+      artl->open(artport, sweep_filename.c_str(), &sweep_id, cmeter);
+    }
+    else{
+      artl->open(artport);
+    }
+  }
+
   
   std::string program_path(argv[0]);
 
@@ -1367,7 +1391,7 @@ int main(int argc, char *argv[])
 	  calib_frames->write((const char*) strbuffs[i]->getFrontRGB(), colorsize);
 	  calib_frames->write((const char*) strbuffs[i]->getFrontDepth(), depthsize);
 	  calib_frames->write((const char*) strbuffs[i]->getFrontIR(), irsizebyte);
-	  std::cerr << "sweep frames remaining: " << write_calib << std::endl;
+	  std::cerr << "calib_frames remaining: " << write_calib << std::endl;
 	  --write_calib;
 	}
 	if(write_calib <= 0){
@@ -1376,9 +1400,34 @@ int main(int argc, char *argv[])
 	  shutdown1 = true;
 	}
       }
+
+
+      if(write_sweep > 0){
+
+	double tick = cmeter->getTick();
+	sweep_frames->write((const char*) &tick, sizeof(double));
+	sweep_frames->write((const char*) strbuffs[i]->getFrontRGB(), colorsize);
+	sweep_frames->write((const char*) strbuffs[i]->getFrontDepth(), depthsize);
+	sweep_frames->write((const char*) strbuffs[i]->getFrontIR(), irsizebyte);
+	std::cerr << "sweep_frames remaining: " << write_sweep << std::endl;
+	--write_sweep;
+	if(write_sweep <= 0){
+	  artl->close();
+	  sweep_frames->close();
+	  shutdown0 = true;
+	  shutdown1 = true;
+	}
+      }
+
+
+
       
       
     }
+
+
+
+
     
     
 #if 1
