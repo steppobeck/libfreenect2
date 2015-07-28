@@ -1140,7 +1140,7 @@ int main(int argc, char *argv[])
     write_sweep = p.getOptsInt("y")[0];
     sweep_filename = p.getOptsString("y")[1];
     sweep_frames = new std::ofstream(sweep_filename.c_str(), std::ofstream::binary);
-    sweep_filename = sweep_filename + ".pose";
+    sweep_filename = sweep_filename + ".poses";
     cmeter = new kinect::ChronoMeter;
   }
 
@@ -1407,6 +1407,7 @@ int main(int argc, char *argv[])
 	double tick = cmeter->getTick();
 	sweep_frames->write((const char*) &tick, sizeof(double));
 	sweep_frames->write((const char*) strbuffs[i]->getFrontRGB(), colorsize);
+	sweep_frames->write((const char*) &tick, sizeof(double));
 	sweep_frames->write((const char*) strbuffs[i]->getFrontDepth(), depthsize);
 	sweep_frames->write((const char*) strbuffs[i]->getFrontIR(), irsizebyte);
 	std::cerr << "sweep_frames remaining: " << write_sweep << std::endl;
