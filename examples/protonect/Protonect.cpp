@@ -1064,7 +1064,7 @@ void compress_by_thread(kinect2::StreamBuffer* strbuff){
 
 int main(int argc, char *argv[])
 {
-  
+  unsigned artport = 0;
   kinect::ARTListener* artl = 0;
   std::string serverport("141.54.147.32:7000");
   std::string serverport_enc("141.54.147.32:7001");
@@ -1098,7 +1098,7 @@ int main(int argc, char *argv[])
   p.addOpt("t", 1, "trackingmode", "enable tracking mode in server mode e.g. 127.0.0.1:7002");
   p.addOpt("w", 1, "writeir", "write numframes of infra red images to irframes.bin");
   p.addOpt("x", 2, "xcalib", "write numframes of matrix pose, color depth and infra red images to filename");
-  p.addOpt("y", 2, "ysweep", "write numframes of matrix pose, color depth and infra red images to filenamebase");
+  p.addOpt("y", 3, "ysweep", "write numframes of matrix pose, color depth and infra red images to filenamebase using art-target id, 1000 /mnt/pitoti/tmp_steppo/23_sweep 6");
 
   p.addOpt("f",-1,"fake", "fake a second kinect");
 
@@ -1139,6 +1139,7 @@ int main(int argc, char *argv[])
     compressrgb = false;
     write_sweep = p.getOptsInt("y")[0];
     sweep_filename = p.getOptsString("y")[1];
+    sweep_id = p.getOptsInt("y")[2];
     sweep_frames = new std::ofstream(sweep_filename.c_str(), std::ofstream::binary);
     sweep_filename = sweep_filename + ".poses";
     cmeter = new kinect::ChronoMeter;
@@ -1173,14 +1174,8 @@ int main(int argc, char *argv[])
   }
 
   if(p.isOptSet("a")){
-    unsigned artport = p.getOptsInt("a")[0];
+    artport = p.getOptsInt("a")[0];
     artl = new kinect::ARTListener();
-    if(sweep_frames != 0){
-      artl->open(artport, sweep_filename.c_str(), &sweep_id, cmeter);
-    }
-    else{
-      artl->open(artport);
-    }
   }
 
   
@@ -1202,6 +1197,19 @@ int main(int argc, char *argv[])
 
  
   }
+
+
+  if(artl){
+    if(sweep_frames != 0){
+      artl->open(artport, sweep_filename.c_str(), &sweep_id, cmeter);
+    }
+    else{
+      artl->open(artport);
+    }
+  }
+
+
+
 
   const unsigned colorsize  = compressrgb ? strbuffs[0]->buff_color_rgb_dxt_size_byte : strbuffs[0]->buff_color_rgb_size_byte;
   const unsigned depthsize  = strbuffs[0]->buff_depth_float_size_byte;
@@ -1413,16 +1421,13 @@ int main(int argc, char *argv[])
 	std::cerr << "sweep_frames remaining: " << write_sweep << std::endl;
 	--write_sweep;
 	if(write_sweep <= 0){
-	  artl->close();
-	  sweep_frames->close();
 	  shutdown0 = true;
 	  shutdown1 = true;
+	  artl->close();
+	  std::cerr << "closing sweep frames file " << sweep_filename << std::endl;
+	  sweep_frames->close();
 	}
       }
-
-
-
-      
       
     }
 
@@ -1442,8 +1447,6 @@ int main(int argc, char *argv[])
       }
     }
 #endif
-
-
 
 
     if(artl){
