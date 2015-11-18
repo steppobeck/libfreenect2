@@ -113,8 +113,8 @@ int CompressDXT(const byte *in, byte *out, int width, int height, int format, in
     nbbytes += job[k].nbb;
   }
 // steppo
-  delete job;
-  delete pid;
+  delete [] job;
+  delete [] pid;
 
   return nbbytes;
 }
