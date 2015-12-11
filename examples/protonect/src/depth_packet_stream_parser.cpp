@@ -87,11 +87,11 @@ void DepthPacketStreamParser::onDataReceived(unsigned char* buffer, size_t in_le
     {
       if((in_length - in_offset) < sizeof(DepthSubPacketFooter))
       {
-        std::cerr << "[DepthPacketStreamParser::handleNewData] incomplete footer detected!" << std::endl;
+        ;//std::cerr << "[DepthPacketStreamParser::handleNewData] incomplete footer detected!" << std::endl;
       }
       else if(footer->length > wb.length)
       {
-        std::cerr << "[DepthPacketStreamParser::handleNewData] image data too short!" << std::endl;
+        ;//std::cerr << "[DepthPacketStreamParser::handleNewData] image data too short!" << std::endl;
       }
       else
       {
@@ -112,12 +112,12 @@ void DepthPacketStreamParser::onDataReceived(unsigned char* buffer, size_t in_le
             }
             else
             {
-              //std::cerr << "[DepthPacketStreamParser::handleNewData] skipping depth packet!" << std::endl;
+              ;//std::cerr << "[DepthPacketStreamParser::handleNewData] skipping depth packet!" << std::endl;
             }
           }
           else
           {
-            std::cerr << "[DepthPacketStreamParser::handleNewData] not all subsequences received " << current_subsequence_ << std::endl;
+            ;//std::cerr << "[DepthPacketStreamParser::handleNewData] not all subsequences received " << current_subsequence_ << std::endl;
           }
 
           current_sequence_ = footer->sequence;

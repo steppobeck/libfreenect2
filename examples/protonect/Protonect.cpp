@@ -58,6 +58,7 @@
 #include <StreamBuffer.h>
 #include <ARTListener.h>
 #include <ChronoMeter.h>
+#include <MemoryWarning.h>
 #include <gloost/Point3.h>
 #include <gloost/Vector3.h>
 #include <MultiRGBDStreamServer.h>
@@ -1064,6 +1065,11 @@ void compress_by_thread(kinect2::StreamBuffer* strbuff){
 
 int main(int argc, char *argv[])
 {
+
+  
+  
+  kinect::MemoryWarning memwarn;
+
   unsigned artport = 0;
   kinect::ARTListener* artl = 0;
   std::string serverport("141.54.147.32:7000");
@@ -1336,8 +1342,16 @@ int main(int argc, char *argv[])
     socket_tm->bind(endpoint.c_str());
   }
 
+  
   gloost::Matrix last_art_target_pose;
   while(!shutdown0 && !shutdown1){
+
+    // check memory
+    if(!memwarn.isOk(65.0)){
+      shutdown0 = true;
+      shutdown1 = true;
+    }
+
 
     barr.wait();
     // swap here

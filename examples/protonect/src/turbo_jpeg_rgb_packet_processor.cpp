@@ -89,7 +89,7 @@ public:
     if(timing_acc_n >= 100.0)
     {
       double avg = (timing_acc / timing_acc_n);
-      std::cout << "[TurboJpegRgbPacketProcessor] avg. time: " << (avg * 1000) << "ms -> ~" << (1.0/avg) << "Hz" << std::endl;
+      //std::cout << "[TurboJpegRgbPacketProcessor] avg. time: " << (avg * 1000) << "ms -> ~" << (1.0/avg) << "Hz" << std::endl;
       timing_acc = 0.0;
       timing_acc_n = 0.0;
     }
@@ -123,7 +123,7 @@ void TurboJpegRgbPacketProcessor::process(const RgbPacket &packet)
     }
     else
     {
-      std::cerr << "[TurboJpegRgbPacketProcessor::doProcess] Failed to decompress rgb image! TurboJPEG error: '" << tjGetErrorStr() << "'" << std::endl;
+      ;//std::cerr << "[TurboJpegRgbPacketProcessor::doProcess] Failed to decompress rgb image! TurboJPEG error: '" << tjGetErrorStr() << "'" << std::endl;
     }
 
     impl_->stopTiming();
