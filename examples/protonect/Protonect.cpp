@@ -1199,7 +1199,7 @@ int main(int argc, char *argv[])
     kinect2::StreamBuffer* strbuff(new kinect2::StreamBuffer);
     strbuffs.push_back(strbuff);
     sleep(5);
-    k_threads.push_back(new boost::thread(boost::bind(&readloop, kinect_num, kinect_serials[kinect_num], program_path, &barr, strbuff, sendir || calibmode || trackingmode, devversion)));
+    k_threads.push_back(new boost::thread(boost::bind(&readloop, kinect_num, kinect_serials[kinect_num], program_path, &barr, strbuff, sendir || calibmode , devversion)));
 
  
   }
@@ -1330,7 +1330,7 @@ int main(int argc, char *argv[])
   }
 
 
-  unsigned msizebyte_tm((depthsize + irsizebyte) * num_kinects);
+  unsigned msizebyte_tm((colorsize_cm + depthsize) * num_kinects);
   zmq::context_t* ctx_tm = 0;
   zmq::socket_t*  socket_tm = 0;
   if (trackingmode){
@@ -1498,11 +1498,12 @@ int main(int argc, char *argv[])
       unsigned offset = 0;
       for (unsigned i = 0; i < num_kinects; ++i){
 
+        memcpy(((unsigned char*)zmqm_tm.data() + offset), strbuffs[i]->getFrontRGB(), colorsize_cm);
+
+        offset += colorsize_cm;
+
         memcpy(((unsigned char*)zmqm_tm.data() + offset), strbuffs[i]->getFrontDepth(), depthsize);
         offset += depthsize;
-
-        memcpy(((unsigned char*)zmqm_tm.data() + offset), strbuffs[i]->getFrontIR(), irsizebyte);
-        offset += irsizebyte;
 
       }
       socket_tm->send(zmqm_tm);
