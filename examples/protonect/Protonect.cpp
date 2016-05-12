@@ -1236,8 +1236,13 @@ int main(int argc, char *argv[])
     zmq::context_t ctx_enc(1); // means single threaded
     zmq::socket_t  socket_enc(ctx_enc, ZMQ_SUB); // means a subscriber
     socket_enc.setsockopt(ZMQ_SUBSCRIBE, "", 0);
+#if ZMQ_VERSION_MAJOR < 3
     uint64_t hwm = 1;
     socket_enc.setsockopt(ZMQ_HWM,&hwm, sizeof(hwm));
+#else
+    uint32_t hwm = 1;
+    socket_enc.setsockopt(ZMQ_RCVHWM,&hwm, sizeof(hwm)); 
+#endif
     std::string endpoint("tcp://" + serverport_enc);
     socket_enc.connect(endpoint.c_str());
     kinect::MultiRGBDStreamHeader quality_control(num_kinects);
@@ -1302,9 +1307,14 @@ int main(int argc, char *argv[])
 
   zmq::context_t ctx(1); // means single threaded
 
-  zmq::socket_t  socket(ctx, ZMQ_PUB); // means a subscriber
+  zmq::socket_t  socket(ctx, ZMQ_PUB); // means a publisher
+#if ZMQ_VERSION_MAJOR < 3
   uint64_t hwm = 1;
   socket.setsockopt(ZMQ_HWM,&hwm, sizeof(hwm));
+#else
+  uint32_t hwm = 1;
+  socket.setsockopt(ZMQ_SNDHWM,&hwm, sizeof(hwm)); 
+#endif
   std::string endpoint("tcp://" + serverport);
   socket.bind(endpoint.c_str());
 
@@ -1322,9 +1332,14 @@ int main(int argc, char *argv[])
   zmq::socket_t*  socket_cm = 0;
   if (calibmode){
     ctx_cm = new zmq::context_t(1); // means single threaded
-    socket_cm = new zmq::socket_t(*ctx_cm, ZMQ_PUB); // means a subscriber
+    socket_cm = new zmq::socket_t(*ctx_cm, ZMQ_PUB); // means a publisher
+#if ZMQ_VERSION_MAJOR < 3
     uint64_t hwm = 1;
     socket_cm->setsockopt(ZMQ_HWM, &hwm, sizeof(hwm));
+#else
+    uint32_t hwm = 1;
+    socket_cm->setsockopt(ZMQ_SNDHWM,&hwm, sizeof(hwm));
+#endif
     std::string endpoint("tcp://" + serverport_cm);
     socket_cm->bind(endpoint.c_str());
   }
@@ -1335,9 +1350,14 @@ int main(int argc, char *argv[])
   zmq::socket_t*  socket_tm = 0;
   if (trackingmode){
     ctx_tm = new zmq::context_t(1); // means single threaded
-    socket_tm = new zmq::socket_t(*ctx_tm, ZMQ_PUB); // means a subscriber
+    socket_tm = new zmq::socket_t(*ctx_tm, ZMQ_PUB); // means a publisher
+#if ZMQ_VERSION_MAJOR < 3
     uint64_t hwm = 1;
     socket_tm->setsockopt(ZMQ_HWM, &hwm, sizeof(hwm));
+#else
+    uint32_t hwm = 1;
+    socket_tm->setsockopt(ZMQ_SNDHWM,&hwm, sizeof(hwm));
+#endif
     std::string endpoint("tcp://" + serverport_tm);
     socket_tm->bind(endpoint.c_str());
   }
