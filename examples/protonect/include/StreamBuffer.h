@@ -1,6 +1,7 @@
 #ifndef LIBFREENECT2_STREAMBUFFER_H
 #define LIBFREENECT2_STREAMBUFFER_H
 
+
 namespace mvt{
   class DXTCompressor;
 }
@@ -12,7 +13,7 @@ namespace kinect2{
   class StreamBuffer{
 
   public:
-    StreamBuffer();
+    StreamBuffer(unsigned x_c_per_serial);
     ~StreamBuffer();
 
     void swap();

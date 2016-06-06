@@ -11,10 +11,10 @@ namespace kinect2{
     color == 1920 x 1080 -> 1024 x 848
   */
 
-  StreamBuffer::StreamBuffer()
+  StreamBuffer::StreamBuffer(unsigned x_c_per_serial)
     : width_dir(512),
       height_dir(424),
-      x_c(390),
+      x_c(/*390*/x_c_per_serial),
       y_c(0),
       width_c(1280),
       height_c(1080),

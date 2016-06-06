@@ -100,6 +100,7 @@ ADD_EXECUTABLE(Protonect
   src/CMDParser.cpp
   src/StreamBuffer.cpp
   src/DXTCompressor.cpp
+  src/FileValue.cpp
   src/fastdxt/libdxt.cpp
   src/fastdxt/dxt.cpp
   src/fastdxt/util.cpp

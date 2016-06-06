@@ -56,6 +56,7 @@
 #include <CMDParser.h>
 #include <zmq.hpp>
 #include <StreamBuffer.h>
+#include <FileValue.h>
 #include <ARTListener.h>
 #include <ChronoMeter.h>
 #include <MemoryWarning.h>
@@ -920,7 +921,7 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
 
   const unsigned s_width_dir = strbuff->width_dir;//512;
   const unsigned s_height_dir = strbuff->height_dir;//424;
-  const unsigned s_x_c = strbuff->x_c;//390;
+  /*const*/ unsigned s_x_c = strbuff->x_c;//390;
   const unsigned s_y_c = strbuff->y_c;//0;
   const unsigned s_width_c = strbuff->width_c;//1280;
   const unsigned s_height_c = strbuff->height_c;//1080;
@@ -949,6 +950,8 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
     // -------------------- NOTE: could do this in parralel using boost::threadgroup
 
     // crop rgb image to new size
+    sys::FileValue x_c_dyn("/tmp/x_c_dyn", 390);
+    s_x_c = x_c_dyn.get();
     unsigned rgb_t_pos = 0;
     for(unsigned y = 0; y < s_height_c; ++y){
       for(int x = (s_width_c - 1); x > -1; --x){
@@ -1189,14 +1192,39 @@ int main(int argc, char *argv[])
 
   // install signal handler now
   signal(SIGINT,sigint_handler);
+
+  std::map<std::string, unsigned> x_c_per_serial;
+  x_c_per_serial[/*23 - */ "179625534347"] = 390;
+#if 0
+    23 - 179625534347
+    24 - 110356534447
+    25 - 007688634347
+    26 - 084864534447
+    27 - 049678134347
+    
+    50 - 011312650647
+    51 - 011482550647
+    52 - 012086450647
+    53 - 016215650647
+    54 - 012126250647
+    
+    30 - 505545442542
+    40 - 505527442542
+    41 - 501411241942
+    42 - 505573342542
+#endif
+
   const std::vector<std::string>& kinect_serials = p.getArgs();
   std::vector<kinect2::StreamBuffer*> strbuffs;
   const unsigned num_kinects = kinect_serials.size();
   boost::barrier barr(num_kinects + 1);
   std::vector<boost::thread* > k_threads;
   for(unsigned kinect_num = 0; kinect_num < num_kinects; ++kinect_num){
-
-    kinect2::StreamBuffer* strbuff(new kinect2::StreamBuffer);
+    unsigned x_c = 390;
+    if(x_c_per_serial[kinect_serials[kinect_num]] != 0){
+      x_c = x_c_per_serial[kinect_serials[kinect_num]];
+    }
+    kinect2::StreamBuffer* strbuff(new kinect2::StreamBuffer(x_c));
     strbuffs.push_back(strbuff);
     sleep(5);
     k_threads.push_back(new boost::thread(boost::bind(&readloop, kinect_num, kinect_serials[kinect_num], program_path, &barr, strbuff, sendir || calibmode , devversion)));
