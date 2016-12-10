@@ -1394,12 +1394,13 @@ int main(int argc, char *argv[])
   gloost::Matrix last_art_target_pose;
   while(!shutdown0 && !shutdown1){
 
-    // check memory
-    if(!memwarn.isOk(65.0)){
-      shutdown0 = true;
-      shutdown1 = true;
+    // check memory when not in sweep mode
+    if(sweep_frames == 0){
+      if(!memwarn.isOk(65.0)){
+        shutdown0 = true;
+        shutdown1 = true;
+      }
     }
-
 
     barr.wait();
     // swap here
@@ -1410,26 +1411,44 @@ int main(int argc, char *argv[])
 
     barr.wait();
 
+
+    if(write_sweep > 0){
+      double tick = cmeter->getTick();
+      sweep_frames->write((const char*) &tick, sizeof(double));
+      sweep_frames->write((const char*) strbuffs[0]->getFrontRGB(), colorsize);
+      sweep_frames->write((const char*) &tick, sizeof(double));
+      sweep_frames->write((const char*) strbuffs[0]->getFrontDepth(), depthsize);
+      sweep_frames->write((const char*) strbuffs[0]->getFrontIR(), irsizebyte);
+      std::cerr << "sweep_frames remaining: " << write_sweep << std::endl;
+      --write_sweep;
+      if(write_sweep <= 0){
+        shutdown0 = true;
+        shutdown1 = true;
+        artl->close();
+        std::cerr << "closing sweep frames file " << sweep_filename << std::endl;
+        sweep_frames->close();
+      }
+      // do nothing which could disturb sweeping from here on!
+      continue;
+    }
+
+
+
     if(artl){
       artl->listen();
     }
 
-#if 1
     // compress if needed
     if(compressrgb){
       boost::thread_group threadGroup;
       for(unsigned i = 0; i < strbuffs.size(); ++i){
 	threadGroup.create_thread(boost::bind(&compress_by_thread, strbuffs[i]));
-	//strbuffs[i]->compressFrontRGBDXT1();
       }
       threadGroup.join_all();
     }
-#endif
 
 
-    // send
     //std::cerr << "sending goes here!" << std::endl;
-    
 
     zmq::message_t zmqm(fake ? msizebyte * 2 : msizebyte);
     unsigned offset = 0;
@@ -1470,26 +1489,6 @@ int main(int argc, char *argv[])
 	  shutdown1 = true;
 	}
       }
-
-
-      if(write_sweep > 0){
-
-	double tick = cmeter->getTick();
-	sweep_frames->write((const char*) &tick, sizeof(double));
-	sweep_frames->write((const char*) strbuffs[i]->getFrontRGB(), colorsize);
-	sweep_frames->write((const char*) &tick, sizeof(double));
-	sweep_frames->write((const char*) strbuffs[i]->getFrontDepth(), depthsize);
-	sweep_frames->write((const char*) strbuffs[i]->getFrontIR(), irsizebyte);
-	std::cerr << "sweep_frames remaining: " << write_sweep << std::endl;
-	--write_sweep;
-	if(write_sweep <= 0){
-	  shutdown0 = true;
-	  shutdown1 = true;
-	  artl->close();
-	  std::cerr << "closing sweep frames file " << sweep_filename << std::endl;
-	  sweep_frames->close();
-	}
-      }
       
     }
 
@@ -1515,6 +1514,7 @@ int main(int argc, char *argv[])
       artl->fill(zmqm.data());
     }
 
+    
     socket.send(zmqm);
 
 
@@ -1560,9 +1560,6 @@ int main(int argc, char *argv[])
 
 
   }
-
-  // free memory here
-
 
 
   return 0;
