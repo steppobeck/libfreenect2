@@ -741,7 +741,7 @@ libusb_device_handle* libusb_open_device_with_vid_pid_serial(libusb_context *ctx
 
 
 
-int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::string& program_path, boost::barrier* barr, kinect2::StreamBuffer* strbuff, bool recvir, bool devversion){
+int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::string& program_path, boost::barrier* barr, kinect2::StreamBuffer* strbuff, bool recvir){
 
 
   size_t executable_name_idx = program_path.rfind("Protonect");
@@ -757,7 +757,10 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
   uint16_t vid = 0x045E;
   uint16_t pid = 0x02C4;
   uint16_t mi = 0x00;
-  if(!devversion){
+  if(serial_wanted == "505545442542" /* Kinect label 30*/ |
+     serial_wanted == "505527442542" /* Kinect label 40*/ |
+     serial_wanted == "501411241942" /* Kinect label 41*/ |
+     serial_wanted == "505573342542" /* Kinect label 42*/){
     pid = 0x02D8;
   }
   
@@ -921,7 +924,7 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
 
   const unsigned s_width_dir = strbuff->width_dir;//512;
   const unsigned s_height_dir = strbuff->height_dir;//424;
-  /*const*/ unsigned s_x_c = strbuff->x_c;//390;
+  const unsigned s_x_c = strbuff->x_c;//390;
   const unsigned s_y_c = strbuff->y_c;//0;
   const unsigned s_width_c = strbuff->width_c;//1280;
   const unsigned s_height_c = strbuff->height_c;//1080;
@@ -950,8 +953,8 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
     // -------------------- NOTE: could do this in parralel using boost::threadgroup
 
     // crop rgb image to new size
-    sys::FileValue x_c_dyn("/tmp/x_c_dyn", 390);
-    s_x_c = x_c_dyn.get();
+    // sys::FileValue x_c_dyn("/tmp/x_c_dyn", 390);
+    // s_x_c = x_c_dyn.get();
     unsigned rgb_t_pos = 0;
     for(unsigned y = 0; y < s_height_c; ++y){
       for(int x = (s_width_c - 1); x > -1; --x){
@@ -1082,7 +1085,6 @@ int main(int argc, char *argv[])
   bool sendcolor = true;
   bool sendir = false;
   bool use_rgbd_compression = false;
-  bool devversion = true;
   int writeir = 0;
   std::ofstream* irframes = 0;
 
@@ -1112,8 +1114,6 @@ int main(int argc, char *argv[])
   p.addOpt("f",-1,"fake", "fake a second kinect");
 
   p.addOpt("e",1,"encoderfeedbackserverport", "e.g. 127.0.0.1:7001");
-
-  p.addOpt("r",-1,"release", "use release version of Kinect V2");
 
   p.init(argc,argv);
 
@@ -1173,10 +1173,6 @@ int main(int argc, char *argv[])
     fake = true;
   }
 
-  if (p.isOptSet("r")){
-    devversion = false;
-  }
-
   if(p.isOptSet("e")){
     serverport_enc = p.getOptsString("e")[0];
     use_rgbd_compression = true;
@@ -1227,7 +1223,7 @@ int main(int argc, char *argv[])
     kinect2::StreamBuffer* strbuff(new kinect2::StreamBuffer(x_c));
     strbuffs.push_back(strbuff);
     sleep(5);
-    k_threads.push_back(new boost::thread(boost::bind(&readloop, kinect_num, kinect_serials[kinect_num], program_path, &barr, strbuff, sendir || calibmode , devversion)));
+    k_threads.push_back(new boost::thread(boost::bind(&readloop, kinect_num, kinect_serials[kinect_num], program_path, &barr, strbuff, sendir || calibmode)));
 
  
   }
