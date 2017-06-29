@@ -28,11 +28,6 @@ include(FindBoost)
 INCLUDE_DIRECTORIES(${BOOST_INCLUDE_DIRS})
 LINK_DIRECTORIES(${BOOST_LIBRARY_DIRS})
 
-# for ART
-include(FindART)
-INCLUDE_DIRECTORIES(${ART_INCLUDE_DIRS})
-LINK_DIRECTORIES(${ART_LIBRARY_DIRS})
-
 
 # dependencies
 FIND_PACKAGE(OpenCV REQUIRED)
@@ -100,6 +95,20 @@ ADD_EXECUTABLE(Protonect
   src/fastdxt/dxt.cpp
   src/fastdxt/util.cpp
 
+  src/ARTListener.cpp
+  src/ChronoMeter.cpp
+  src/clock.cpp
+  src/device.cpp
+  src/device_dtrack.cpp
+  src/devicemanager.cpp
+  src/dtrack.cpp
+  src/Matrix.cpp
+  src/MemoryWarning.cpp
+  src/Point3.cpp
+  src/sensor.cpp
+  src/timevalue.cpp
+  src/Vector3.cpp
+
   Protonect.cpp
   
   ${LIBFREENECT2_THREADING_SOURCE}
@@ -117,7 +126,6 @@ TARGET_LINK_LIBRARIES(Protonect
   ${GLFW_LIBRARIES}
   ${ZMQ_LIBRARIES}
   ${BOOST_LIBRARIES}
-  ${ART_LIBRARIES}
 )
 
 ADD_EXECUTABLE(test_opengl
