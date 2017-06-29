@@ -62,8 +62,6 @@
 #include <MemoryWarning.h>
 #include <gloost/Point3.h>
 #include <gloost/Vector3.h>
-#include <MultiRGBDStreamServer.h>
-#include <MultiRGBDStreamHeader.h>
 
 #include <boost/thread/thread.hpp>
 #include <boost/thread/barrier.hpp>
@@ -1084,7 +1082,6 @@ int main(int argc, char *argv[])
   bool senddepth = true;
   bool sendcolor = true;
   bool sendir = false;
-  bool use_rgbd_compression = false;
   int writeir = 0;
   std::ofstream* irframes = 0;
 
@@ -1112,8 +1109,6 @@ int main(int argc, char *argv[])
   p.addOpt("y", 3, "ysweep", "write numframes of matrix pose, color depth and infra red images to filenamebase using art-target id, 1000 /mnt/pitoti/tmp_steppo/23_sweep 6");
 
   p.addOpt("f",-1,"fake", "fake a second kinect");
-
-  p.addOpt("e",1,"encoderfeedbackserverport", "e.g. 127.0.0.1:7001");
 
   p.init(argc,argv);
 
@@ -1173,10 +1168,6 @@ int main(int argc, char *argv[])
     fake = true;
   }
 
-  if(p.isOptSet("e")){
-    serverport_enc = p.getOptsString("e")[0];
-    use_rgbd_compression = true;
-  }
 
   if(p.isOptSet("a")){
     artport = p.getOptsInt("a")[0];
@@ -1244,90 +1235,6 @@ int main(int argc, char *argv[])
   const unsigned colorsize  = compressrgb ? strbuffs[0]->buff_color_rgb_dxt_size_byte : strbuffs[0]->buff_color_rgb_size_byte;
   const unsigned depthsize  = strbuffs[0]->buff_depth_float_size_byte;
   const unsigned irsizebyte = strbuffs[0]->buff_ir_8bit_size_byte;
-
-  // ---------------------------- begin new for RGBDCompression
-  
-  if(use_rgbd_compression){
-    // init server
-    kinect::MultiRGBDStreamServer enc(serverport,
-				      num_kinects,
-				      strbuffs[0]->width_c,
-				      strbuffs[0]->height_c,
-				      colorsize,
-				      strbuffs[0]->width_dir,
-				      strbuffs[0]->height_dir);
-
-    zmq::context_t ctx_enc(1); // means single threaded
-    zmq::socket_t  socket_enc(ctx_enc, ZMQ_SUB); // means a subscriber
-    socket_enc.setsockopt(ZMQ_SUBSCRIBE, "", 0);
-#if ZMQ_VERSION_MAJOR < 3
-    uint64_t hwm = 1;
-    socket_enc.setsockopt(ZMQ_HWM,&hwm, sizeof(hwm));
-#else
-    uint32_t hwm = 1;
-    socket_enc.setsockopt(ZMQ_RCVHWM,&hwm, sizeof(hwm)); 
-#endif
-    std::string endpoint("tcp://" + serverport_enc);
-    socket_enc.connect(endpoint.c_str());
-    kinect::MultiRGBDStreamHeader quality_control(num_kinects);
-    for(unsigned i = 0; i != quality_control.streams.size(); ++i){
-      quality_control.streams[i].color_quality      = 0;
-      quality_control.streams[i].depth_quality      = 0;
-    }
-
-
-
-
-    while(!shutdown0 && !shutdown1){
-
-      barr.wait();
-      for(unsigned i = 0; i < strbuffs.size(); ++i){
-	strbuffs[i]->swap();
-      }
-      barr.wait();
-
-      if(artl){
-	artl->listen();
-      }
-
-#if 1
-      // compress if needed
-      if(compressrgb){
-	boost::thread_group threadGroup;
-	for(unsigned i = 0; i < strbuffs.size(); ++i){
-	  threadGroup.create_thread(boost::bind(&compress_by_thread, strbuffs[i]));
-	  //strbuffs[i]->compressFrontRGBDXT1();
-	}
-	threadGroup.join_all();
-      }
-#endif
-
-
-      // receive feedback from client
-      const unsigned size_byte(quality_control.calcHeaderSizeByte());
-      zmq::message_t zmqm_enc;
-      socket_enc.recv(&zmqm_enc, ZMQ_NOBLOCK);
-      if(zmqm_enc.size() == size_byte){
-	memcpy((unsigned char*) quality_control.streams.data(), (unsigned char*) zmqm_enc.data(), size_byte);
-      }
-
-      // send
-      //std::cerr << "sending goes here!" << std::endl;
-    
-      for(unsigned i = 0; i < num_kinects; ++i){
-	enc.fillColor((unsigned char*) compressrgb ? strbuffs[i]->getFrontRGBDXT1() : strbuffs[i]->getFrontRGB(), i, quality_control.streams[i].color_quality, quality_control.streams[i].color_size_byte);
-	enc.fillDepth((float*) strbuffs[i]->getFrontDepth(), i, quality_control.streams[i].depth_quality, quality_control.streams[i].color_size_byte);
-      }
-
-      enc.startEncode();
-      enc.waitAndSend();
-      
-    }
-    
-  }
-  // ---------------------------- end new for RGBDCompression
-
-
 
   zmq::context_t ctx(1); // means single threaded
 
