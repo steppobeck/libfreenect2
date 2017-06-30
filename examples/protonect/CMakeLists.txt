@@ -17,17 +17,23 @@ INCLUDE(GenerateResources)
 #set the default path for built executables to the "bin" directory
 SET(EXECUTABLE_OUTPUT_PATH ${MY_DIR}/bin)
 
+
+
+find_package( Boost 1.54.0 COMPONENTS
+chrono
+filesystem
+thread
+system
+REQUIRED
+)
+INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
+LINK_DIRECTORIES(${Boost_LIBRARY_DIRS})
+
 # for zmq
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake_modules)
 include(FindZMQ)
 INCLUDE_DIRECTORIES(${ZMQ_INCLUDE_DIRS})
 LINK_DIRECTORIES(${ZMQ_LIBRARY_DIRS})
-
-# for boost
-include(FindBoost)
-INCLUDE_DIRECTORIES(${BOOST_INCLUDE_DIRS})
-LINK_DIRECTORIES(${BOOST_LIBRARY_DIRS})
-
 
 # dependencies
 FIND_PACKAGE(OpenCV REQUIRED)
@@ -125,7 +131,7 @@ TARGET_LINK_LIBRARIES(Protonect
   glfw
   ${GLFW_LIBRARIES}
   ${ZMQ_LIBRARIES}
-  ${BOOST_LIBRARIES}
+  ${Boost_LIBRARIES}
 )
 
 ADD_EXECUTABLE(test_opengl
