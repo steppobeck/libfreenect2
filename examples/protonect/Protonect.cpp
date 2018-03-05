@@ -70,6 +70,26 @@
 #include <map>
 //bool should_resubmit = true;
 //uint32_t num_iso_requests_outstanding = 0;
+static bool s_show_cv_images = false;
+
+  unsigned char* convertTo8Bit(float* in, unsigned w, unsigned h){
+    static unsigned char* b = new unsigned char [w*h];
+
+    float max_v = 0.0;
+    for(unsigned idx = 0; idx != w*h; ++idx){
+      max_v = std::max(in[idx],max_v);
+    }
+    if(max_v != 0.0){
+      for(unsigned idx = 0; idx != w*h; ++idx){
+  const float n = in[idx]/max_v;
+  unsigned char v = (unsigned char) (255.0 * n);
+  b[idx] = v;
+      }
+    }
+
+    return b;
+  }
+
 
 int KSetSensorStatus(libusb_device_handle *handle, KSensorStatus KSensorStatus)
 {
@@ -937,11 +957,11 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
   {
     frame_listener.waitForNewFrame(frames);
 
-    libfreenect2::Frame *rgb = frames[libfreenect2::Frame::Color];
-    libfreenect2::Frame *ir = 0;
+    std::shared_ptr<libfreenect2::Frame> rgb = frames[libfreenect2::Frame::Color];
+    std::shared_ptr<libfreenect2::Frame> ir = nullptr;
     if(recvir)
       ir = frames[libfreenect2::Frame::Ir];
-    libfreenect2::Frame *depth = frames[libfreenect2::Frame::Depth];
+    std::shared_ptr<libfreenect2::Frame> depth = frames[libfreenect2::Frame::Depth];
 
     unsigned char* buff_color_rgb = strbuff->getBackRGB();//new unsigned char [buff_color_rgb_size_byte];
     float* buff_depth_float = strbuff->getBackDepth();//new float [s_width_dir * s_height_dir];
@@ -990,12 +1010,16 @@ int readloop(unsigned kinect_id, const std::string& serial_wanted, const std::st
       }
     }
 
-#if 0
+  if(s_show_cv_images){
     cv::imshow((std::string("rgb@") + serial_wanted).c_str(),   cv::Mat(s_height_c, s_width_c, CV_8UC3, buff_color_rgb));
-    //cv::imshow((std::string("ir@") + serial_wanted).c_str(),    cv::Mat(s_height_dir, s_width_dir, CV_8UC1, buff_ir_8bit));
+    if(recvir){
+      cv::imshow((std::string("ir@") + serial_wanted).c_str(),    cv::Mat(s_height_dir, s_width_dir, CV_8UC1, buff_ir_8bit));  
+    }
     //cv::imshow((std::string("depth@") + serial_wanted).c_str(), cv::Mat(s_height_dir, s_width_dir, CV_32FC1, buff_depth_float));
+    cv::imshow((std::string("depth@") + serial_wanted).c_str(), cv::Mat(s_height_dir, s_width_dir, CV_8UC1, convertTo8Bit(buff_depth_float, s_width_dir, s_height_dir)));
     cv::waitKey(1);
-#endif
+  }
+
 
 
 
@@ -1072,7 +1096,7 @@ int main(int argc, char *argv[])
 
   
   
-  kinect::MemoryWarning memwarn;
+  //kinect::MemoryWarning memwarn;
 
   unsigned artport = 0;
   kinect::ARTListener* artl = 0;
@@ -1109,6 +1133,9 @@ int main(int argc, char *argv[])
   p.addOpt("y", 3, "ysweep", "write numframes of matrix pose, color depth and infra red images to filenamebase using art-target id, 1000 /mnt/pitoti/tmp_steppo/23_sweep 6");
 
   p.addOpt("f",-1,"fake", "fake a second kinect");
+
+  
+  p.addOpt("z",-1,"zupershowopencv", "show images using OpenCV windows, default: false");  
 
   p.init(argc,argv);
 
@@ -1149,6 +1176,9 @@ int main(int argc, char *argv[])
     cmeter = new kinect::ChronoMeter;
   }
 
+  if(p.isOptSet("z")){
+    s_show_cv_images = true;
+  }
 
   bool calibmode = false;
   std::string serverport_cm("127.0.0.1:7001");
@@ -1293,16 +1323,21 @@ int main(int argc, char *argv[])
     socket_tm->bind(endpoint.c_str());
   }
 
-  
+  size_t framecounter = 0;
   gloost::Matrix last_art_target_pose;
   while(!shutdown0 && !shutdown1){
-
+    ++framecounter;
+#if 0
     // check memory when not in sweep mode
     if(sweep_frames == 0){
       if(!memwarn.isOk(65.0)){
         shutdown0 = true;
         shutdown1 = true;
       }
+    }
+#endif
+    if(sweep_frames == 0 && (framecounter % 100 == 1)){
+	std::cerr << "sent frames so far: " << framecounter << std::endl;
     }
 
     barr.wait();

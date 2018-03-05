@@ -38,7 +38,7 @@ public:
 
   tjhandle decompressor;
 
-  Frame *frame;
+  std::shared_ptr<Frame> frame;
 
   double timing_acc;
   double timing_acc_n;
@@ -73,7 +73,10 @@ public:
 
   void newFrame()
   {
-    frame = new Frame(1920, 1080, tjPixelSize[TJPF_BGR]);
+
+    //frame = new Frame(1920, 1080, tjPixelSize[TJPF_BGR]);
+    frame = std::make_shared<Frame>(1920, 1080, tjPixelSize[TJPF_BGR]);
+    //std::cerr << "color new:\t" << frame << std::endl;
   }
 
   void startTiming()

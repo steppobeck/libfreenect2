@@ -38,6 +38,11 @@
 namespace libfreenect2
 {
 
+  struct SuperFrame{
+    std::shared_ptr<Frame> ir;
+    std::shared_ptr<Frame> depth;
+  };
+
 std::string loadShaderSource(const std::string& filename)
 {
   const unsigned char* data;
@@ -222,7 +227,10 @@ public:
     width = new_width;
     height = new_height;
     size = height * width * bytes_per_pixel;
+
     data = new unsigned char[size];
+
+std::cerr << "new data with new: " << data << std::endl;
 
     glGenTextures(1, &texture);
     bindToUnit(GL_TEXTURE0);
@@ -247,9 +255,11 @@ public:
     glReadPixels(0, 0, width, height, FormatT::Format, FormatT::Type, data);
   }
 
-  Frame *downloadToNewFrame()
+  std::shared_ptr<Frame> downloadToNewFrame()
   {
-    Frame *f = new Frame(width, height, bytes_per_pixel);
+    //Frame *f = new Frame(width, height, bytes_per_pixel);
+    //std::cerr << "depth/ir new:\t" << f << std::endl;
+    std::shared_ptr<Frame> f = std::make_shared<Frame>(width, height, bytes_per_pixel);
     downloadToBuffer(f->data);
 
     typedef unsigned char type;
@@ -311,6 +321,8 @@ struct OpenGLDepthPacketProcessorImpl
   double timing_current_start;
 
   static const bool do_debug = true;
+
+
 
   struct Vertex
   {
@@ -510,8 +522,11 @@ struct OpenGLDepthPacketProcessorImpl
     program.setUniform("Params.max_depth", params.max_depth);
   }
 
-  void run(Frame **ir, Frame **depth)
+  SuperFrame run(bool has_listener/*Frame *ir, Frame *depth*/)
   {
+    SuperFrame res;
+    res.ir = nullptr;
+    res.depth = nullptr;
     // data processing 1
     glViewport(0, 0, 512, 424);
     stage1.use();
@@ -536,11 +551,11 @@ struct OpenGLDepthPacketProcessorImpl
     glBindVertexArray(square_vao);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
-    if(ir != 0)
+    if(has_listener/*ir != 0*/)
     {
       glBindFramebuffer(GL_READ_FRAMEBUFFER, stage1_framebuffer);
       glReadBuffer(GL_COLOR_ATTACHMENT4);
-      *ir = stage1_infrared.downloadToNewFrame();
+      res.ir = stage1_infrared.downloadToNewFrame();
     }
 
     if(config.EnableBilateralFilter)
@@ -605,20 +620,20 @@ struct OpenGLDepthPacketProcessorImpl
 
       glBindVertexArray(square_vao);
       glDrawArrays(GL_TRIANGLES, 0, 6);
-      if(depth != 0)
+      if(has_listener/*depth != 0*/)
       {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, filter2_framebuffer);
         glReadBuffer(GL_COLOR_ATTACHMENT1);
-        *depth = filter2_depth.downloadToNewFrame();
+        res.depth = filter2_depth.downloadToNewFrame();
       }
     }
     else
     {
-      if(depth != 0)
+      if(has_listener/*depth != 0*/)
       {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, stage2_framebuffer);
         glReadBuffer(GL_COLOR_ATTACHMENT1);
-        *depth = stage2_depth.downloadToNewFrame();
+        res.depth = stage2_depth.downloadToNewFrame();
       }
     }
 
@@ -650,6 +665,8 @@ struct OpenGLDepthPacketProcessorImpl
     }
 
     params_need_update = false;
+
+    return res;
   }
 };
 
@@ -805,7 +822,7 @@ void OpenGLDepthPacketProcessor::load11To16LutFromFile(const char* filename)
 void OpenGLDepthPacketProcessor::process(const DepthPacket &packet)
 {
   bool has_listener = this->listener_ != 0;
-  Frame *ir = 0, *depth = 0;
+  //Frame *ir = 0, *depth = 0;
 
   impl_->startTiming();
 
@@ -813,7 +830,7 @@ void OpenGLDepthPacketProcessor::process(const DepthPacket &packet)
 
   std::copy(packet.buffer, packet.buffer + packet.buffer_length, impl_->input_data.data);
   impl_->input_data.upload();
-  impl_->run(has_listener ? &ir : 0, has_listener ? &depth : 0);
+  SuperFrame res = impl_->run(has_listener/* ? ir : 0, has_listener ? depth : 0*/);
 
   if(impl_->do_debug) glfwSwapBuffers(impl_->opengl_context_ptr->glfw_ctx);
 
@@ -821,8 +838,8 @@ void OpenGLDepthPacketProcessor::process(const DepthPacket &packet)
 
   if(has_listener)
   {
-    this->listener_->addNewFrame(Frame::Ir, ir);
-    this->listener_->addNewFrame(Frame::Depth, depth);
+    this->listener_->addNewFrame(Frame::Ir, res.ir);
+    this->listener_->addNewFrame(Frame::Depth, res.depth);
   }
 }
 

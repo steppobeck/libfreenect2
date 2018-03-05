@@ -30,6 +30,8 @@
 #include <map>
 #include <libfreenect2/threading.h>
 
+#include <memory>
+
 namespace libfreenect2
 {
 
@@ -59,7 +61,7 @@ struct Frame
   }
 };
 
-typedef std::map<Frame::Type, Frame*> FrameMap;
+typedef std::map<Frame::Type, std::shared_ptr<Frame>> FrameMap;
 
 // TODO: reimplement, this is just some adhoc construct, probably performance can be improved
 class FrameListener
@@ -73,7 +75,7 @@ public:
 
   void release(FrameMap &frame);
 
-  bool addNewFrame(Frame::Type type, Frame *frame);
+  bool addNewFrame(Frame::Type type, std::shared_ptr<Frame> frame);
 private:
   libfreenect2::mutex mutex_;
   libfreenect2::condition_variable condition_;

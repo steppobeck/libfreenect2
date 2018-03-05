@@ -73,7 +73,8 @@ public:
   bool enable_bilateral_filter, enable_edge_filter;
   DepthPacketProcessor::Parameters params;
 
-  Frame *ir_frame, *depth_frame;
+  std::shared_ptr<Frame> ir_frame;
+  std::shared_ptr<Frame> depth_frame;
 
   bool flip_ptables;
 
@@ -113,13 +114,17 @@ public:
 
   void newIrFrame()
   {
-    ir_frame = new Frame(512, 424, 4);
+    //ir_frame = new Frame(512, 424, 4);
+    ir_frame = std::make_shared<Frame>(512, 424, 4);
+    //std::cerr << "cpu ir new:\t" << ir_frame << std::endl;
     //ir_frame = new Frame(512, 424, 12);
   }
 
   void newDepthFrame()
   {
-    depth_frame = new Frame(512, 424, 4);
+    //depth_frame = new Frame(512, 424, 4);
+    depth_frame = std::make_shared<Frame>(512, 424, 4);
+    //std::cerr << "cpu depth new:\t" << depth_frame << std::endl;
   }
 
   int32_t decodePixelMeasurement(unsigned char* data, int sub, int x, int y)

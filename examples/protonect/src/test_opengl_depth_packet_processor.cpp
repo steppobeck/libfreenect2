@@ -95,7 +95,8 @@ int main(int argc, char **argv) {
 
   loadBufferFromFile(binpath + "../rawir/rawir_4599.bin", p.buffer, p.buffer_length);
 
-  libfreenect2::Frame *ir, *depth;
+  std::shared_ptr<libfreenect2::Frame> ir;
+  std::shared_ptr<libfreenect2::Frame> depth;
   cv::Mat cpu_ir, cpu_depth, ogl_ir, ogl_depth;
 
   ref_processor.process(p);

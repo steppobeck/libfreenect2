@@ -26,6 +26,8 @@
 
 #include <libfreenect2/frame_listener.h>
 
+#include <iostream>
+
 namespace libfreenect2
 {
 
@@ -55,16 +57,18 @@ void FrameListener::waitForNewFrame(FrameMap &frame)
 
 void FrameListener::release(FrameMap &frame)
 {
+#if 0
   for(FrameMap::iterator it = frame.begin(); it != frame.end(); ++it)
   {
+    std::cerr << "r delete:\t" << it->second << std::endl;
     delete it->second;
     it->second = 0;
   }
-
+#endif
   frame.clear();
 }
 
-bool FrameListener::addNewFrame(Frame::Type type, Frame *frame)
+bool FrameListener::addNewFrame(Frame::Type type, std::shared_ptr<Frame> frame)
 {
   if((subscribed_frame_types_ & type) == 0) return false;
 
@@ -76,7 +80,10 @@ bool FrameListener::addNewFrame(Frame::Type type, Frame *frame)
     if(it != next_frame_.end())
     {
       // replace frame
+#if 0      
+      std::cerr << "a delete:\t" << it->second << std::endl;
       delete it->second;
+#endif
       it->second = frame;
     }
     else
